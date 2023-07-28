@@ -1,0 +1,427 @@
+"","values","study_name","type","year"
+"1",1.15,"Aldrin et al. 2012","instrumental",2012
+"2",3.45,"Aldrin et al. 2012","instrumental",2012
+"3",1.98,"Aldrin et al. 2012","instrumental",2012
+"4",2.1,"Anagnostou et al. 2016","paleo",2016
+"5",4.6,"Anagnostou et al. 2016","paleo",2016
+"6",3.6,"Anagnostou et al. 2016","paleo",2016
+"7",1.3,"Andreae et al. 2005","constrained models",2005
+"8",10,"Andreae et al. 2005","constrained models",2005
+"9",2,"Andreae et al. 2005","constrained models",2005
+"10",2.1,"Andrews et al. 2012","models",2012
+"11",4.7,"Andrews et al. 2012","models",2012
+"12",3.37,"Andrews et al. 2012","models",2012
+"13",2.2,"Andrews et al. 2015","models",2015
+"14",6,"Andrews et al. 2015","models",2015
+"15",3.6,"Andrews et al. 2015","models",2015
+"16",1,"Andronova and Schlesinger 2001","combination",2001
+"17",9.3,"Andronova and Schlesinger 2001","combination",2001
+"18",2,"Andronova and Schlesinger 2001","combination",2001
+"19",1.7,"Annan and Hargreaves 2006","combination",2006
+"20",4.9,"Annan and Hargreaves 2006","combination",2006
+"21",2.9,"Annan and Hargreaves 2006","combination",2006
+"22",0.5,"Annan and Hargreaves 2015","paleo",2015
+"23",4,"Annan and Hargreaves 2015","paleo",2015
+"24",2.5,"Annan and Hargreaves 2015","paleo",2015
+"25",4.39,"Annan et al. 2005","paleo",2005
+"26",6.45,"Annan et al. 2005","paleo",2005
+"27",5.44,"Annan et al. 2005","paleo",2005
+"28",1.7,"Armour 2017","instrumental",2017
+"29",7.1,"Armour 2017","instrumental",2017
+"30",2.9,"Armour 2017","instrumental",2017
+"31",0.95,"Bates 2016","instrumental",2016
+"32",1.05,"Bates 2016","instrumental",2016
+"33",1,"Bates 2016","instrumental",2016
+"34",1.7,"Bender et al. 2010","constrained models",2010
+"35",4.1,"Bender et al. 2010","constrained models",2010
+"36",2.7,"Bender et al. 2010","constrained models",2010
+"37",1.5,"Bengtsson and Schwartz 2013","instrumental",2013
+"38",2.5,"Bengtsson and Schwartz 2013","instrumental",2013
+"39",2,"Bengtsson and Schwartz 2013","instrumental",2013
+"40",1.5,"Bodman et al. 2013","constrained models",2013
+"41",5.2,"Bodman et al. 2013","constrained models",2013
+"42",3.1,"Bodman et al. 2013","constrained models",2013
+"43",2.3,"Brient and Schneider 2016","constrained models",2016
+"44",5,"Brient and Schneider 2016","constrained models",2016
+"45",4,"Brient and Schneider 2016","constrained models",2016
+"46",3,"Brown and Caldeira 2017","constrained models",2017
+"47",4.2,"Brown and Caldeira 2017","constrained models",2017
+"48",3.7,"Brown and Caldeira 2017","constrained models",2017
+"49",2.22,"Caballero and Huber 2013","paleo",2013
+"50",10,"Caballero and Huber 2013","paleo",2013
+"51",3,"Caballero and Huber 2013","paleo",2013
+"52",2.07,"Caldwell et al. 2016","models",2016
+"53",4.58,"Caldwell et al. 2016","models",2016
+"54",3.31,"Caldwell et al. 2016","models",2016
+"55",1.778,"Cawley et al. 2015","instrumental",2015
+"56",4.38,"Cawley et al. 2015","instrumental",2015
+"57",2,"Cawley et al. 2015","instrumental",2015
+"58",1.5,"Chung and Soden 2015","models",2015
+"59",3.4,"Chung and Soden 2015","models",2015
+"60",2,"Chung and Soden 2015","models",2015
+"61",1.3,"Chylek and Lohmann 2008","paleo",2008
+"62",2.3,"Chylek and Lohmann 2008","paleo",2008
+"63",1.8,"Chylek and Lohmann 2008","paleo",2008
+"64",1.07,"Chylek et al. 2007","instrumental",2007
+"65",1.77,"Chylek et al. 2007","instrumental",2007
+"66",1.555555,"Chylek et al. 2007","instrumental",2007
+"67",2.1,"CMIP3","models",2007
+"68",4.4,"CMIP3","models",2007
+"69",3.15,"CMIP3","models",2007
+"70",1.9,"CMIP5","models",2013
+"71",4.8,"CMIP5","models",2013
+"72",3.1,"CMIP5","models",2013
+"73",2.2,"Cox et al 2018","constrained models",2018
+"74",3.4,"Cox et al 2018","constrained models",2018
+"75",2.8,"Cox et al 2018","constrained models",2018
+"76",2.16,"Dessler 2013","models",2013
+"77",4.56,"Dessler 2013","models",2013
+"78",2.94,"Dessler 2013","models",2013
+"79",2.4,"Dessler and Forster 2018","constrained models",2018
+"80",4.5,"Dessler and Forster 2018","constrained models",2018
+"81",3.3,"Dessler and Forster 2018","constrained models",2018
+"82",3.05,"Donohoe et al. 2014","instrumental",2014
+"83",3.15,"Donohoe et al. 2014","instrumental",2014
+"84",3.1,"Donohoe et al. 2014","instrumental",2014
+"85",0,"Edwards et al. 2007","paleo",2007
+"86",10,"Edwards et al. 2007","paleo",2007
+"87",5,"Edwards et al. 2007","paleo",2007
+"88",3.3,"Fasullo and Trenberth 2012","constrained models",2012
+"89",4.5,"Fasullo and Trenberth 2012","constrained models",2012
+"90",4,"Fasullo and Trenberth 2012","constrained models",2012
+"91",1.4,"Forest et al. 2002","constrained models",2002
+"92",7.7,"Forest et al. 2002","constrained models",2002
+"93",3.5,"Forest et al. 2002","constrained models",2002
+"94",2.1,"Forest et al. 2006","instrumental",2006
+"95",8.9,"Forest et al. 2006","instrumental",2006
+"96",4.1,"Forest et al. 2006","instrumental",2006
+"97",2.1,"Forest et al. 2008","models",2008
+"98",5,"Forest et al. 2008","models",2008
+"99",3,"Forest et al. 2008","models",2008
+"100",1.05,"Forster 2016","instrumental",2016
+"101",5.3,"Forster 2016","instrumental",2016
+"102",2.95,"Forster 2016","instrumental",2016
+"103",1,"Forster and Gregory 2006","instrumental",2006
+"104",4.1,"Forster and Gregory 2006","instrumental",2006
+"105",1.6,"Forster and Gregory 2006","instrumental",2006
+"106",2.1,"Forster and Taylor 2006","models",2006
+"107",3.36,"Forster and Taylor 2006","models",2006
+"108",2.7,"Forster and Taylor 2006","models",2006
+"109",1.95,"Forster et al. 2013","models",2013
+"110",4.55,"Forster et al. 2013","models",2013
+"111",3.22,"Forster et al. 2013","models",2013
+"112",1.2,"Frame et al. 2005","instrumental",2005
+"113",5.2,"Frame et al. 2005","instrumental",2005
+"114",2.3,"Frame et al. 2005","instrumental",2005
+"115",4.29,"Friedrich et al. 2016","paleo",2016
+"116",1.52,"Friedrich et al. 2016","paleo",2016
+"117",5.44,"Friedrich et al. 2016","paleo",2016
+"118",2.04,"Friedrich et al. 2016","paleo",2016
+"119",4.88,"Friedrich et al. 2016","paleo",2016
+"120",1.78,"Friedrich et al. 2016","paleo",2016
+"121",2.15,"Geoffroy et al. 2013a","models",2013
+"122",4.55,"Geoffroy et al. 2013a","models",2013
+"123",3.25,"Geoffroy et al. 2013a","models",2013
+"124",1.95,"Geoffroy et al. 2013b","models",2013
+"125",5.55,"Geoffroy et al. 2013b","models",2013
+"126",3.5,"Geoffroy et al. 2013b","models",2013
+"127",1.6,"Gregory et al. 2002","instrumental",2002
+"128",10,"Gregory et al. 2002","instrumental",2002
+"129",2.1,"Gregory et al. 2002","instrumental",2002
+"130",0.69,"Harde 2017","models",2017
+"131",0.71,"Harde 2017","models",2017
+"132",0.7,"Harde 2017","models",2017
+"133",1.9,"Hargreaves and Annan 2016","paleo",2016
+"134",3.7,"Hargreaves and Annan 2016","paleo",2016
+"135",3,"Hargreaves and Annan 2016","paleo",2016
+"136",0.8,"Hargreaves et al. 2012","paleo",2012
+"137",4,"Hargreaves et al. 2012","paleo",2012
+"138",2.3,"Hargreaves et al. 2012","paleo",2012
+"139",2.4,"Harris et al. 2013","constrained models",2013
+"140",4.3,"Harris et al. 2013","constrained models",2013
+"141",3.3,"Harris et al. 2013","constrained models",2013
+"142",1.4,"Harrison et al. 2015","paleo",2015
+"143",4.4,"Harrison et al. 2015","paleo",2015
+"144",4,"Harrison et al. 2015","paleo",2015
+"145",1,"Harvey and Kaufmann 2002","instrumental",2002
+"146",3,"Harvey and Kaufmann 2002","instrumental",2002
+"147",2,"Harvey and Kaufmann 2002","instrumental",2002
+"148",1.5,"Hegerl et al. 2006","combination",2006
+"149",6.2,"Hegerl et al. 2006","combination",2006
+"150",2.5,"Hegerl et al. 2006","combination",2006
+"151",2,"Heydt et al. 2014","paleo",2014
+"152",3.5,"Heydt et al. 2014","paleo",2014
+"153",2.5555,"Heydt et al. 2014","paleo",2014
+"154",2.2,"Heydt et al. 2016","paleo",2016
+"155",7,"Heydt et al. 2016","paleo",2016
+"156",3,"Heydt et al. 2016","paleo",2016
+"157",2,"Holden et al. 2010","paleo",2010
+"158",5,"Holden et al. 2010","paleo",2010
+"159",3.6,"Holden et al. 2010","paleo",2010
+"160",1.7,"Huber and Knutti 2011","constrained models",2011
+"161",6.5,"Huber and Knutti 2011","constrained models",2011
+"162",3.6,"Huber and Knutti 2011","constrained models",2011
+"163",2.9,"Huber et al. 2011","constrained models",2011
+"164",4,"Huber et al. 2011","constrained models",2011
+"165",3.4,"Huber et al. 2011","constrained models",2011
+"166",2,"IPCC AR4","combination",2007
+"167",4.5,"IPCC AR4","combination",2007
+"168",3,"IPCC AR4","combination",2007
+"169",1.5,"IPCC AR5","combination",2013
+"170",4.5,"IPCC AR5","combination",2013
+"171",3,"IPCC AR5","combination",2013
+"172",1.7,"IPCC TAR","combination",2001
+"173",4.2,"IPCC TAR","combination",2001
+"174",3,"IPCC TAR","combination",2001
+"175",2,"Johansson et al. 2015","instrumental",2015
+"176",1.59,"Johansson et al. 2015","instrumental",2015
+"177",3.17,"Johansson et al. 2015","instrumental",2015
+"178",7.78,"Johansson et al. 2015","instrumental",2015
+"179",2.5,"Johansson et al. 2015","instrumental",2015
+"180",3.06,"Johansson et al. 2015","instrumental",2015
+"181",3.5,"Jones et al. 2010","paleo",2010
+"182",3.7,"Jones et al. 2010","paleo",2010
+"183",3.6,"Jones et al. 2010","paleo",2010
+"184",2,"Kaufmann and Stern 2002","instrumental",2002
+"185",2.8,"Kaufmann and Stern 2002","instrumental",2002
+"186",2.5555556,"Kaufmann and Stern 2002","instrumental",2002
+"187",3.8,"Keery et al 2018","paleo",2018
+"188",3.8,"Keery et al 2018","paleo",2018
+"189",3.8,"Keery et al 2018","paleo",2018
+"190",2,"Knutti and Hegerl 2008","combination",2008
+"191",4.5,"Knutti and Hegerl 2008","combination",2008
+"192",3,"Knutti and Hegerl 2008","combination",2008
+"193",2,"Knutti et al. 2002","instrumental",2002
+"194",9.2,"Knutti et al. 2002","instrumental",2002
+"195",4.8,"Knutti et al. 2002","instrumental",2002
+"196",1.5,"Knutti et al. 2006","constrained models",2006
+"197",6.4,"Knutti et al. 2006","constrained models",2006
+"198",3.4,"Knutti et al. 2006","constrained models",2006
+"199",1.4,"Kohler et al. 2010","paleo",2010
+"200",5.2,"Kohler et al. 2010","paleo",2010
+"201",2.4,"Kohler et al. 2010","paleo",2010
+"202",2.5,"Kohler et al. 2015","paleo",2015
+"203",2,"Kohler et al. 2015","paleo",2015
+"204",5.5,"Kohler et al. 2015","paleo",2015
+"205",3.5,"Kohler et al. 2015","paleo",2015
+"206",3.7,"Kohler et al. 2015","paleo",2015
+"207",2.5,"Kohler et al. 2015","paleo",2015
+"208",3.7,"Krissansen-Totton and Catling 2017","paleo",2017
+"209",7.5,"Krissansen-Totton and Catling 2017","paleo",2017
+"210",5.6,"Krissansen-Totton and Catling 2017","paleo",2017
+"211",1.6,"Kummer and Dessler 2014","instrumental",2014
+"212",4.1,"Kummer and Dessler 2014","instrumental",2014
+"213",2.3,"Kummer and Dessler 2014","instrumental",2014
+"214",1.8,"Kutzbach et al. 2013","paleo",2013
+"215",2,"Kutzbach et al. 2013","paleo",2013
+"216",7.8,"Kutzbach et al. 2013","paleo",2013
+"217",4,"Kutzbach et al. 2013","paleo",2013
+"218",5,"Kutzbach et al. 2013","paleo",2013
+"219",3,"Kutzbach et al. 2013","paleo",2013
+"220",4.3,"Lea 2004","paleo",2004
+"221",5.9,"Lea 2004","paleo",2004
+"222",5.1,"Lea 2004","paleo",2004
+"223",1,"Lewis 2013","instrumental",2013
+"224",3,"Lewis 2013","instrumental",2013
+"225",1.6,"Lewis 2013","instrumental",2013
+"226",1.2,"Lewis 2014","instrumental",2014
+"227",4.5,"Lewis 2014","instrumental",2014
+"228",2.2,"Lewis 2014","instrumental",2014
+"229",0.7,"Lewis 2016","instrumental",2016
+"230",3.2,"Lewis 2016","instrumental",2016
+"231",1.66,"Lewis 2016","instrumental",2016
+"232",1.05,"Lewis and Curry 2015","instrumental",2015
+"233",4.05,"Lewis and Curry 2015","instrumental",2015
+"234",1.64,"Lewis and Curry 2015","instrumental",2015
+"235",1.2,"Lewis and Curry 2018","instrumental",2018
+"236",3.1,"Lewis and Curry 2018","instrumental",2018
+"237",1.76,"Lewis and Curry 2018","instrumental",2018
+"238",1.1,"Lewis and Grunwald 2017","combination",2017
+"239",4.05,"Lewis and Grunwald 2017","combination",2017
+"240",1.87,"Lewis and Grunwald 2017","combination",2017
+"241",1.8,"Libardoni and Forest 2011","constrained models",2011
+"242",4.4,"Libardoni and Forest 2011","constrained models",2011
+"243",2.7,"Libardoni and Forest 2011","constrained models",2011
+"244",2.8,"Lin et al. 2010","instrumental",2010
+"245",3.7,"Lin et al. 2010","instrumental",2010
+"246",3.1,"Lin et al. 2010","instrumental",2010
+"247",0.4,"Lindzen and Choi 2009","instrumental",2009
+"248",0.51,"Lindzen and Choi 2009","instrumental",2009
+"249",0.4555,"Lindzen and Choi 2009","instrumental",2009
+"250",0.5,"Lindzen and Choi 2011","instrumental",2011
+"251",1.1,"Lindzen and Choi 2011","instrumental",2011
+"252",0.7,"Lindzen and Choi 2011","instrumental",2011
+"253",0.82,"Loeb et al. 2016","instrumental",2016
+"254",10,"Loeb et al. 2016","instrumental",2016
+"255",2,"Loeb et al. 2016","instrumental",2016
+"256",1.75,"Loehle 2014","instrumental",2014
+"257",2.32,"Loehle 2014","instrumental",2014
+"258",1.99,"Loehle 2014","instrumental",2014
+"259",1.45,"Loehle 2015","instrumental",2015
+"260",1.55,"Loehle 2015","instrumental",2015
+"261",1.5,"Loehle 2015","instrumental",2015
+"262",1.6,"Loutre et al. 2011","constrained models",2011
+"263",4.8,"Loutre et al. 2011","constrained models",2011
+"264",3,"Loutre et al. 2011","constrained models",2011
+"265",2.5,"Lovejoy 2014","instrumental",2014
+"266",3.66,"Lovejoy 2014","instrumental",2014
+"267",3.08,"Lovejoy 2014","instrumental",2014
+"268",4.75,"Lucarini et al. 2017","models",2017
+"269",4.85,"Lucarini et al. 2017","models",2017
+"270",4.8,"Lucarini et al. 2017","models",2017
+"271",3,"Martinez-Boti et al. 2015","paleo",2015
+"272",4.4,"Martinez-Boti et al. 2015","paleo",2015
+"273",4,"Martinez-Boti et al. 2015","paleo",2015
+"274",1.1,"Marvel et al. 2015","constrained models",2015
+"275",10,"Marvel et al. 2015","constrained models",2015
+"276",3.1,"Marvel et al. 2015","constrained models",2015
+"277",1.52,"Masson and Knutti 2013","constrained models",2013
+"278",5.09,"Masson and Knutti 2013","constrained models",2013
+"279",3.36,"Masson and Knutti 2013","constrained models",2013
+"280",1.19,"Masters 2014","constrained models",2014
+"281",5.15,"Masters 2014","constrained models",2014
+"282",1.98,"Masters 2014","constrained models",2014
+"283",2.1,"Meinshausen et al. 2009","combination",2009
+"284",7.1,"Meinshausen et al. 2009","combination",2009
+"285",2.8,"Meinshausen et al. 2009","combination",2009
+"286",0.8,"Monckton et al. 2015","instrumental",2015
+"287",1.3,"Monckton et al. 2015","instrumental",2015
+"288",1,"Monckton et al. 2015","instrumental",2015
+"289",2.5,"Murphy et al. 2004","constrained models",2004
+"290",5.4,"Murphy et al. 2004","constrained models",2004
+"291",3.5,"Murphy et al. 2004","constrained models",2004
+"292",0.93,"Murphy et al. 2009","instrumental",2009
+"293",10,"Murphy et al. 2009","instrumental",2009
+"294",3,"Murphy et al. 2009","instrumental",2009
+"295",1.81,"Olivie et al. 2012","models",2012
+"296",3.5,"Olivie et al. 2012","models",2012
+"297",2.33,"Olivie et al. 2012","models",2012
+"298",1.8,"Olson et al. 2012","combination",2012
+"299",4.9,"Olson et al. 2012","combination",2012
+"300",2.8,"Olson et al. 2012","combination",2012
+"301",1.2,"Otto et al. 2013","instrumental",2013
+"302",0.9,"Otto et al. 2013","instrumental",2013
+"303",3.9,"Otto et al. 2013","instrumental",2013
+"304",5,"Otto et al. 2013","instrumental",2013
+"305",2,"Otto et al. 2013","instrumental",2013
+"306",1.9,"Otto et al. 2013","instrumental",2013
+"307",1.3,"Palaeosens 2012","paleo",2012
+"308",5.8,"Palaeosens 2012","paleo",2012
+"309",3.2,"Palaeosens 2012","paleo",2012
+"310",2,"Piani et al. 2005","models",2005
+"311",6.3,"Piani et al. 2005","models",2005
+"312",3.5,"Piani et al. 2005","models",2005
+"313",2.2,"Proistosescu and Huybers 2017","models",2017
+"314",6.1,"Proistosescu and Huybers 2017","models",2017
+"315",3.4,"Proistosescu and Huybers 2017","models",2017
+"316",8.05,"Ragone et al. 2016","models",2016
+"317",8.15,"Ragone et al. 2016","models",2016
+"318",8.1,"Ragone et al. 2016","models",2016
+"319",2.1,"Ranen 2005","models",2005
+"320",5.3,"Ranen 2005","models",2005
+"321",3.4,"Ranen 2005","models",2005
+"322",1.5,"Roe and Armour 2011","combination",2011
+"323",10,"Roe and Armour 2011","combination",2011
+"324",3,"Roe and Armour 2011","combination",2011
+"325",1.66,"Rohling et al. 2012","paleo",2012
+"326",4.99,"Rohling et al. 2012","paleo",2012
+"327",3.15,"Rohling et al. 2012","paleo",2012
+"328",1.5,"Royer et al. 2007","paleo",2007
+"329",6.2,"Royer et al. 2007","paleo",2007
+"330",2.8,"Royer et al. 2007","paleo",2007
+"331",1.7,"Sanderson 2013","constrained models",2013
+"332",4.6,"Sanderson 2013","constrained models",2013
+"333",2.9,"Sanderson 2013","constrained models",2013
+"334",2.9,"Sanderson 2015","constrained models",2015
+"335",3.95,"Sanderson 2015","constrained models",2015
+"336",3.4,"Sanderson 2015","constrained models",2015
+"337",1.92,"Sanderson et al. 2011","models",2011
+"338",5,"Sanderson et al. 2011","models",2011
+"339",2.7,"Sanderson et al. 2011","models",2011
+"340",2.29,"Sanso and Forest 2009","constrained models",2009
+"341",6.1,"Sanso and Forest 2009","constrained models",2009
+"342",3.95,"Sanso and Forest 2009","constrained models",2009
+"343",1.75,"Sanso et al. 2008","constrained models",2008
+"344",5.68,"Sanso et al. 2008","constrained models",2008
+"345",3.12,"Sanso et al. 2008","constrained models",2008
+"346",1.4,"Schmittner at al. 2011","combination",2011
+"347",2.8,"Schmittner at al. 2011","combination",2011
+"348",2.3,"Schmittner at al. 2011","combination",2011
+"349",0.9,"Schwartz 2007","instrumental",2007
+"350",2.9,"Schwartz 2007","instrumental",2007
+"351",1.9,"Schwartz 2007","instrumental",2007
+"352",1.5,"Schwartz 2012","instrumental",2012
+"353",6,"Schwartz 2012","instrumental",2012
+"354",3,"Schwartz 2012","instrumental",2012
+"355",1.2,"Schwartz et al. 2014","constrained models",2014
+"356",2.9,"Schwartz et al. 2014","constrained models",2014
+"357",2,"Schwartz et al. 2014","constrained models",2014
+"358",2.3,"Sexton et al. 2012","combination",2012
+"359",4.3,"Sexton et al. 2012","combination",2012
+"360",3.25,"Sexton et al. 2012","combination",2012
+"361",3.3,"Shaffer et al. 2016","paleo",2016
+"362",3.7,"Shaffer et al. 2016","paleo",2016
+"363",5.6,"Shaffer et al. 2016","paleo",2016
+"364",6.5,"Shaffer et al. 2016","paleo",2016
+"365",4.4,"Shaffer et al. 2016","paleo",2016
+"366",5.2,"Shaffer et al. 2016","paleo",2016
+"367",3,"Sherwood et al. 2014","constrained models",2014
+"368",4.8,"Sherwood et al. 2014","constrained models",2014
+"369",4,"Sherwood et al. 2014","constrained models",2014
+"370",2.38,"Siler et al. 2017","constrained models",2017
+"371",4.89,"Siler et al. 2017","constrained models",2017
+"372",3.68,"Siler et al. 2017","constrained models",2017
+"373",0.92,"Skeie et al. 2014","instrumental",2014
+"374",3.18,"Skeie et al. 2014","instrumental",2014
+"375",1.84,"Skeie et al. 2014","instrumental",2014
+"376",0.6,"Skinner 2012","paleo",2012
+"377",6.5,"Skinner 2012","paleo",2012
+"378",3,"Skinner 2012","paleo",2012
+"379",2.25,"Soden and Held 2006","models",2006
+"380",4.2,"Soden and Held 2006","models",2006
+"381",2.92,"Soden and Held 2006","models",2006
+"382",0.39,"Specht et al. 2016","combination",2016
+"383",0.41,"Specht et al. 2016","combination",2016
+"384",0.4,"Specht et al. 2016","combination",2016
+"385",2.15,"Stainforth et al. 2005","combination",2005
+"386",6.95,"Stainforth et al. 2005","combination",2005
+"387",3.35,"Stainforth et al. 2005","combination",2005
+"388",4.35,"Stern et al. 2006","instrumental",2006
+"389",4.45,"Stern et al. 2006","instrumental",2006
+"390",4.4,"Stern et al. 2006","instrumental",2006
+"391",1.5,"Stevens et al. 2016","combination",2016
+"392",4.5,"Stevens et al. 2016","combination",2016
+"393",2,"Stevens et al. 2016","combination",2016
+"394",3.3,"Su et al. 2014","constrained models",2014
+"395",3.5,"Su et al. 2014","constrained models",2014
+"396",3.4,"Su et al. 2014","constrained models",2014
+"397",5,"Tan et al. 2016","constrained models",2016
+"398",5.3,"Tan et al. 2016","constrained models",2016
+"399",5.22222,"Tan et al. 2016","constrained models",2016
+"400",2.7,"Tett et al. 2013","combination",2013
+"401",4.2,"Tett et al. 2013","combination",2013
+"402",3.4,"Tett et al. 2013","combination",2013
+"403",3.9,"Tian 2015","constrained models",2015
+"404",4.1,"Tian 2015","constrained models",2015
+"405",4,"Tian 2015","constrained models",2015
+"406",1.5,"Tomassini et al. 2007","constrained models",2007
+"407",7.2,"Tomassini et al. 2007","constrained models",2007
+"408",2.8,"Tomassini et al. 2007","constrained models",2007
+"409",3.1,"Tsushima et al. 2005","instrumental",2005
+"410",4.73,"Tsushima et al. 2005","instrumental",2005
+"411",3.77,"Tsushima et al. 2005","instrumental",2005
+"412",2.1,"Urban et al. 2014","instrumental",2014
+"413",4.6,"Urban et al. 2014","instrumental",2014
+"414",3.1,"Urban et al. 2014","instrumental",2014
+"415",1.7,"van Hateren 2013","combination",2013
+"416",2.3,"van Hateren 2013","combination",2013
+"417",2,"van Hateren 2013","combination",2013
+"418",1.2,"von Deimling et al. 2006","paleo",2006
+"419",4.3,"von Deimling et al. 2006","paleo",2006
+"420",2,"von Deimling et al. 2006","paleo",2006
+"421",2.9,"Zelinka et al. 2016","models",2016
+"422",3.1,"Zelinka et al. 2016","models",2016
+"423",3,"Zelinka et al. 2016","models",2016
+"424",3.45,"Zhai et al. 2015","constrained models",2015
+"425",4.35,"Zhai et al. 2015","constrained models",2015
+"426",3.9,"Zhai et al. 2015","constrained models",2015
