@@ -1,0 +1,190 @@
+---
+title: "Weighted Confidence Intervals"
+author: "Joe Brown"
+date: "2023-08-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Weighted Confidence Intervals (CIs)
+
+Confidence intervals are a range of estimated values for a variable that is unknown. If a variable is unknown, but we know information about it's probability distribution, we can estimate it from its distribution with different levels of confidence. Confidence intervals create the upper and lower bound of a distribution. One of the more common CIs is 95% CI (or 5-95%). This describes that we are 95% confident that the actual value of our variable falls within this range. Any values falling outside our upper and lower confidence interval are considered to be very unlikely. That being said, we don't actually know the probabilities of values outside our CI range being true or false. 
+
+The IPCC uses confidence interval frequently to describe the certainty of their estimamtions. Sometimes it is referred to as scaled certainty or scaled likelihood.
+
+Here are a few examples:
+
+- *very likely* > 90% probability 
+- *likely* > 66% probability 
+- *more likely than not* > 50% probability
+- *unlikey* < 60%
+- *very unlikely* < 10%
+
+You will see these descriptors, and others, in the IPCC report. Below is an example of a probability distribution highlighting the 10-90% confidence intervals.
+
+```{r, echo=FALSE, warning=FALSE}
+# Load the necessary library
+library(ggplot2)
+library(matilda)
+library(Hmisc)
+
+# Generate a normal distribution with mean 0 and standard deviation 1
+x <- seq(-3, 3, length.out = 1000)
+y <- dnorm(x, mean = 0, sd = 1)
+
+# Create a data frame for the plot
+df <- data.frame(x = x, y = y)
+
+# Generate the confidence bounds (10% and 90%)
+lower_bound <- qnorm(0.10, mean = 0, sd = 1)
+upper_bound <- qnorm(0.90, mean = 0, sd = 1)
+
+# Create the plot with probability distribution curve and confidence bounds shading
+ggplot(df, aes(x, y)) +
+  geom_line(color = "blue") +  # Line for the normal distribution curve
+  geom_area(data = subset(df, x >= lower_bound & x <= upper_bound),
+            aes(ymax = y, ymin = 0), fill = "lightblue", alpha = 0.5) +  # Shading the 10-90% confidence bounds
+  xlab("x") +
+  ylab("Probability Density") +
+  ggtitle("Normal Probability Distribution with 10-90% Confidence Bounds") +
+  theme_light()
+
+```
+
+For this example we can say that it is very likely (90% confidence) that our value falls within the shaded region. 
+
+# Weighted Confidence intervals
+
+Weighted confidence intervals are a type of estimate that takes weights of the data into account. So, in a weighted confidence interval, data points with higher weights have greater influence on the final interval estimate. This allows us to reflect varying degrees of confidence in different data. 
+
+Here is a function I have used for computing confidence intervals:
+
+```{r}
+
+# Function to calculate weighted confidence intervals
+
+weighted_confidence_interval <- function(data, weights, level = 0.95) {
+  # Calculate the weighted mean
+  weighted_mean <- sum(data * weights) / sum(weights)
+  
+  # Calculate the standard error of the weighted mean
+  weighted_se <- sqrt(sum(weights * (data - weighted_mean)^2) / (sum(weights) * (length(data) - 1)))
+  
+  # Calculate the t-score for the desired confidence level
+  t_score <- qt((1 + level) / 2, df = length(data) - 1)
+  
+  # Calculate the margin of error
+  margin_of_error <- t_score * weighted_se
+  
+  # Calculate the confidence interval
+  lower_bound <- weighted_mean - margin_of_error
+  upper_bound <- weighted_mean + margin_of_error
+  
+  return(c(lower_bound, upper_bound))
+}
+
+
+
+```
+
+In practice this takes values and weights corresponding to each value and then computes probabilities based on the the intervals the user is looking to make their upper and lower bound. 
+
+Using this function and specifying `probs = 0.50` will produce the weighted median.
+
+Here is an example of using this function with Matilda data, weighted using score_ramp. I use functions in tidyverse to group data and compute weighted intervals.
+
+```{r, results = 'hide', message=FALSE}
+# 1 Running iterate_hector ------------------------------------
+
+library(matilda)
+library(tidyverse)
+library(ggplot2)
+
+# SSP to initiate a Hector instance
+ssp126 <- newcore(system.file("input/hector_ssp126.ini", package = "hector"),
+                  name = "SSP1-2.6")
+
+# Run the generating parameters
+set.seed(1)
+params <- generate_params(ssp126, 5)
+
+# Running the model for CO2 and Global temperature
+start <- Sys.time()
+h_result <- iterate_hector(ssp126, params)
+print(Sys.time()-start)
+
+```
+
+```{r, results = 'hide'}
+# 2 Weighting Hector Runs -------------------------------------------------
+
+# Criterion
+criterion = criterion_co2_obs()
+
+# Compute weights using observed CO2.
+weights <- score_hruns(h_result, criterion, score_ramp, w1 = 3, w2 = 15)
+
+# Merge results so each Hector run in h_result is assigned its corresponding 
+# weight. 
+hector_wts <- merge(weights, h_result, by = "run_number")
+
+```
+
+```{r, results = 'hide'}
+# 3 Computing Confidence Intervals -----------------------------------------------------
+
+# Computing confidence intervals for warming
+# subset data to include warming variable
+co2_data <- subset(hector_wts, 
+                    variable == CONCENTRATIONS_CO2() &
+                      year > 2000 &
+                      year < 2101)
+
+# median co2 calculation - here we are grouping by year and using our 20
+# runs to compute the confidence intervals
+# Calculate the weighted median and weighted confidence intervals
+# Calculate confidence intervals and weighted median using dplyr
+confidence_intervals <- co2_data %>%
+  group_by(year) %>%
+  summarise(
+    mean_co2 = weighted.mean(value, weights), # Example of weighted mean
+    CI_10 = weighted_confidence_interval(value, weights, level = 0.90)[1],
+    CI_90 = weighted_confidence_interval(value, weights, level = 0.90)[2],
+    CI_33 = weighted_confidence_interval(value, weights, level = 0.66)[1],
+    CI_66 = weighted_confidence_interval(value, weights, level = 0.66)[2]
+  )
+
+# Print the result
+print(confidence_intervals)
+
+
+```
+
+We can plot this information by plotting the weighted median and then placing bounds around the weighted median for a range of values that are *likely* (33-66% CI) and *very likely* (10-90% CI)
+
+```{r}
+# Plot the data using ggplot2
+proj <- ggplot() +
+  geom_line(data = confidence_intervals, aes(x = year, 
+                                       y = mean_co2),
+            color = "salmon",
+            linewidth = 1) +
+  geom_ribbon(data = confidence_intervals, aes(x = year, 
+                                         ymin = CI_10, 
+                                         ymax = CI_90), 
+              fill = "salmon",
+              alpha = 0.1) +
+    geom_ribbon(data = confidence_intervals, aes(x = year, 
+                                         ymin = CI_33, 
+                                         ymax = CI_66), 
+              fill = "salmon",
+              alpha = 0.5) +
+  labs(title = "Median CO2 Concentration Projections",
+       x = "Year",
+       y = "CO2 Concentration") +
+  theme_light()
+proj
+```

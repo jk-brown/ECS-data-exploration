@@ -4,11 +4,13 @@ library(matilda)
 ini <- system.file("input/hector_ssp245.ini", package = "hector")
 core <- newcore(ini)
 
-# set params
+# Keep the 5 generated params but change ECS - base
 set.seed(1)
-params1 <- generate_params(core, 50)
+params1 <- generate_params(core, 5)
+params_ECS_baseline <- params1[1:5]
 params_ECS_baseline$ECS <- 3.2
 
+# Keep the 5 generated params but change ECS - base
 params_ECS_no_paleo <- params1[1:5]
 params_ECS_no_paleo$ECS <- 3.8
 
@@ -51,7 +53,7 @@ temp_proj <- subset(wt_result,
                     variable == GLOBAL_TAS())
 # add evidence identifier
 temp_proj$evidence <- rep(c("baseline, ECS = 3.2", "no_paleo, ECS = 3.8", 
-                            "emergent constraint, ECS = 3.4"), each = 12550)
+                            "emergent constraint, ECS = 3.4"), each = 3765)
 
 #compute median warming and quantiles
 median_warming <- temp_proj %>% 
