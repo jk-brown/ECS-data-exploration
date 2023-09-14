@@ -1,0 +1,371 @@
+---
+title: "sampling_ecs_from_known_PDFs"
+author: "Joe Brown"
+date: "2023-09-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Goal
+
+The goal of this document is to go through the process of sampling ECS from the probability distributions that are described in Sherwood et al. 2020. The primary purpose of this is to at least have a back-up analysis in case I am unable to figure out a way to test ECS uncertainty using MCMC sampling.
+
+In this document I use code to estimate standard deviation from the percentiles published in the Sherwood paper and run `matilda` to assess how these different distrubutions impact `gmst` PDFs for the SSP2-4.5 scenario. 
+
+# Install and load libraries
+
+```{r, message=FALSE}
+library(matilda)
+library(ggplot2)
+```
+
+# Functions to aid sampling
+
+## Lognormal function 
+
+This function helps us quantify lognormal distibution when passed mean (`m`) and standard deviation (`sd`):
+
+```{r}
+lognorm <- function(m, sd){
+  
+  # re-parameterization of supplied mean value
+  mn <- log(m^2 / sqrt(sd^2 + m^2))
+  
+  # re-parameterization of supplied sd value
+  stdev <- sqrt(log(1 + (sd^2 / m^2)))
+  
+  # stores new value in list - when pushed to rlnorm(), will provide normal distribution
+  # of arithmetic mean (m) and standard deviation (sd)
+  c(mn, stdev)
+  
+}
+```
+
+## Estimating sigma from percentiles
+
+This function take the high an low percentiles of interest and estimates sigma.
+
+For example, supply 5-95% (2.3, 4.7) and function will return an estimated sigma. 
+
+```{r}
+estimate_sigma <- function(per_5_95, per_17_83) {
+  
+  # Calculate the length of the percentiles
+  percentile_length_5_95 <- per_5_95[2] - per_5_95[1]
+  percentile_length_17_83 <- per_17_83[2] - per_17_83[1]
+  
+  # Estimate sigma using percentile lengths
+  sigma_5_95 <- percentile_length_5_95 / (2 * qnorm(0.95)) 
+  sigma_17_83 <- percentile_length_17_83 / (2 * qnorm(0.83)) 
+  
+  # Average the two estimates assuming they are equally important for the estimated
+  # sigma.
+  estimated_sigma <- (sigma_5_95 + sigma_17_83) / 2
+  
+  return(estimated_sigma)
+}
+
+```
+
+## Sampling values from lognormal distirbution
+
+```{r}
+
+generate_lognormal_samples <- function(mu, sigma, n_samples) {
+  
+  # Generate normally distributed samples in log-space
+  samples <- rlnorm(n_samples, lognorm(mu, sigma) [1], lognorm(mu, sigma) [2])
+  
+  return(samples)
+}
+
+```
+
+With the above functions established we can test to see if samples reflect those described in Sherwood et al:
+
+```{r}
+baseline_mu <- 3.2
+percentile_5_95 <- c(2.3, 4.7)
+percentile_17_83 <- c(2.6, 3.9)
+
+baseline_sigma <- estimate_sigma(percentile_5_95, percentile_17_83)
+baseline_sigma
+
+```
+This can be completed for any of the lines of evidence that has a PDF characterized in Sherwood et al. 
+
+Once`sigma` is estimated, we can use it to sample values from a distribution.
+
+For this task we can use the `gererate_lognormal_samples()` from above, or we can use another distibution, like a normal distribtution. 
+
+```{r}
+set.seed(123)
+n = 1000
+
+lognormal_samples = data.frame(ECS = generate_lognormal_samples(baseline_mu, baseline_sigma, n))
+
+norm_samples = data.frame(ECS = rnorm(n, baseline_mu, baseline_sigma))
+
+ggplot() +
+  geom_density(data = lognormal_samples, aes(x = ECS),
+               fill = NA, color = "dodgerblue", linewidth = 1.0) +
+  geom_density(data = norm_samples, aes(x = ECS),
+               fill = NA, color = "red", linewidth = 1.0) +
+  xlim(1, 8) +
+  labs(title = "Density Plot of Monte Carlo Samples",
+       x = "ECS Value",
+       y = "Density") +
+  theme_light()
+
+```
+We can also see how well our simulation matches the distribution by inspecting the summary stats of the distirbution and comparing to the results in Sherwood et al.:
+
+```{r}
+# for lognormal estimates
+mean(lognormal_samples$ECS)
+median(lognormal_samples$ECS)
+
+```
+```{r}
+# for normal estimates
+mean(norm_samples$ECS)
+median(norm_samples$ECS)
+
+```
+
+We can see from inspecting these values that the lognormal samples with the `mu` and `sigma` values we presented is closer to Sherwood et al. 
+
+# Complete for several evidence scenarios
+
+This process can be completed for several of the PDFs representing different lines of evidence.
+
+For example, this set of evidence scenarios corresponds to the PDFs presented in Figure 24 or Sherwood et al:
+
+```{r}
+# Create list of percentiles to use for sigma estimation
+# Define the scenarios and their data (from Sherwood Table 10)
+scenarios <- c("UL", "US", "no_hist", "no_paleo_cold")
+scenario_data <- list(
+  UL = list(mu = 3.2, 
+            per5_95 = c(2.3, 4.7), 
+            per17_83 = c(2.6, 3.9)),
+  US = list(mu = 3.7, 
+            per5_95 = c(2.4, 5.7), 
+            per17_83 = c(2.8, 4.5)),
+  no_hist = list(mu = 3.1,
+                 per5_95 = c(2.0, 4.6), 
+                 per17_83 = c(2.3, 3.7)),
+  no_paleo_cold = list(mu = 3.4,
+                       per5_95 = c(2.3, 5.1), 
+                       per17_83 = c(2.6, 4.1))
+)
+
+# Create an empty vector to store the results
+ecs_samples <- list()
+
+# loop through the list to estimate sd for the PDFs
+for (i in 1:length(scenarios)) {
+  scenario <- scenarios[i]
+  data <- scenario_data[[scenario]]
+  
+  mu = data$mu
+  ci_5_95 = data$per5_95
+  ci_17_83 = data$per17_83
+  
+  sigma = estimate_sigma(ci_5_95, ci_17_83)
+  
+  n = 1000
+  
+  samples = generate_lognormal_samples(mu = mu, sigma = sigma, n_samples = n)
+  
+  ecs_samples[[scenario]] = samples
+}
+
+```
+
+This loop creates a list of 1000 ECS samples based on the `mu` reported in Sherwood et al an `sigma` estimated using percentiles presented in Sherwood et al.
+
+Let's plot 
+```{r, warning=FALSE}
+# Create a df from the sample list created
+ecs_samples_df <- data.frame(
+  UL = ecs_samples$UL,
+  US = ecs_samples$US,
+  no_hist = ecs_samples$no_hist,
+  no_paleo_cold = ecs_samples$no_paleo_cold
+)
+
+ggplot(data = ecs_samples_df) +
+  geom_density(aes(UL), fill = NA, color = "black", linewidth = 1.0) +
+  geom_density(aes(US), fill = NA, color = "red", linewidth = 1.0) +
+  geom_density(aes(no_hist), fill = NA, color = "orange", linewidth = 1.0) +
+  geom_density(aes(no_paleo_cold), fill = NA, color = "blue", linewidth = 1.0) +
+  xlim(1, 8) +
+  labs(x = "ECS", 
+       y = "PDF") +
+  theme_light()
+  
+```
+
+As we are only using 10k samples  of the PDF to attempt to recreate it, the PDF curves only roughly resemble those presented in Sherwood figure 24. 
+
+Increasing the number of samples will get cause these distributions to look more similar to the publication figure. 
+
+**Is this reason enough to attempt MCMC?**
+
+**Should I try Metropolis Hastings Algorithm to using this data, with a inverse gamma prior?**
+
+**What would be the correct prior to try for an analysis like this?**
+
+# Run Matilda using different ECS PDFs 
+
+Here we want to determine how different PDFs from the evidence scenarios used above impact gmst projections.
+
+Configure a Hector core:
+```{r}
+ini <-  system.file("input/hector_ssp245.ini", package = "hector")
+core_245 <- newcore(ini, name = "SSP2-4.5")
+```
+
+Now we will generate parameter values, but we want to omit ECS values and replace them with the values we sampled above:
+```{r, message=FALSE}
+set.seed(123)
+param_values = generate_params(core_245, 1000)
+param_values$ECS = NULL
+
+# Create a list to store results
+result <- list()
+
+# loop through the ECS samples and for each evidence sample, run Matilda
+for (evidence in names(ecs_samples)) {
+  # define evidence names
+  evidence_name = paste(evidence)
+  
+  # extract data from ecs_samples
+  ecs_data = ecs_samples[[evidence]]
+  
+  # add ECS values to param_values
+  param_values$ECS = ecs_data
+  
+  # Run Matilda
+  model = iterate_model(
+    core_245,
+    params = param_values,
+    save_years = 1850:2100,
+    save_vars = c(GMST(), CONCENTRATIONS_CO2())
+  )
+  
+  # Check for NAs and store results - if NAs are presebt clean data by omitting NAs
+  # else store model data as is
+  if (anyNA(model)) {
+    cleaned_model <-  na.omit(model)
+    cleaned_model$evidence <-  rep(evidence_name)
+    result[[evidence]] <- cleaned_model
+  } else {
+    model$evidence <- rep(evidence_name)
+    result[[evidence]] <- model
+  }
+  
+}
+```
+
+Once there are model results, we can weight them based on scoring criterion:
+```{r}
+
+for (evidence in names(result)) {
+  
+  scores = score_runs(result[[evidence]], 
+                      criterion_gmst_obs(),
+                      score_bayesian)
+  
+  result[[evidence]] <- merge(result[[evidence]],
+                              scores,
+                              by = "run_number")
+  
+}
+
+```
+
+With runs now scored for each of the lines of evidence, let's plot -- these plots are preliminary, generally we would want to normalize for the reference period.  
+
+```{r}
+# combine data 
+result_df <- do.call(rbind, result)
+
+# plot 
+ggplot(data = subset(result_df, variable == GMST()
+                     & year >= 1950
+                     & year <= 2100)) +
+  geom_line(aes(x = year, 
+                y = value, 
+                group = run_number,
+                color = weights, 
+                alpha = weights),
+            linewidth = 0.25)+
+  scale_color_gradient(low = "lightblue", high = "dodgerblue4",
+                       name = "Weights") +
+  scale_alpha_continuous(range(c(0,1))) +
+  labs(Title = "Weighted GMST Projections for ECS PDF samples",
+       x = "Year",
+       y = "GMST") +
+  guides(alpha = "none") +
+  theme_light() +
+  facet_wrap(~evidence)
+```
+
+This rough visualization gives some information that might lead us to believe that "UL" or the baseline evidence scenario for ECS constrains the range of GMST values we could expect by the end of the century, while leaving out the paleo_cold and historical lines of evidence increase the uncertainty of warming by the end of the century.
+
+We can also visualize the probability distribution of temperature for a give time period.
+
+Lets quantify metrics and plot the PDFs of warming for these lines of evidence (or at least try to do that).
+
+```{r}
+# create a metric to get distribution of long term warming
+metric <- new_metric(var = GMST(), years = 1995:2089, op = mean)
+
+# for each of the evidence scenarios quantify metric values
+metric_list <- list()
+
+for (evidence in names(result)) {
+  
+  # define evidence names again
+  evidence_name = paste(evidence)
+  
+  # compute metrics for each element in the result list
+  metric_value = metric_calc(result[[evidence]], metric)
+  
+  # add evidence names to the metric values
+  metric_value$evidence <- evidence_name
+  
+  # store results
+  metric_list[[evidence]] <- metric_value
+  
+}
+```
+
+Lets attempt to plot the warming distributions.
+```{r}
+# I want to overlay plots, so make separate dfs
+metric_value_df <- do.call(rbind, metric_list)
+
+# plot density curves
+ggplot(data = metric_value_df) +
+  geom_density(aes(x = metric_result, 
+                   color = evidence, 
+                   group = evidence),
+               linewidth = 1.0) +
+  scale_color_manual(values =  c("#0A9F9D", "#CEB175", "#E54E21", "#6C8645")) +
+  theme_light() +
+  labs(title = "Warming distributions by ECS line",
+       x = "Warming 1995-2089",
+       y = "PDF")
+  
+```
+
+This visualization shows that the temperature probability for the UL line of evidence (baseline, which includes all the lines of evidence and a uniform lambda prior) constrains warming uncertainty, reducing both the upper and lower tail. The US (uniform S prior) may also constrain the warming distribution as much as UL (Why? Because they both include all lines of evidence? Maybe?). However, the distribution is shifted warmer (Why? what is causing this? Higher probability of higher ECS values from the distribution.)
+
+We also get a clearer picture of how removing historical or paleo_cold evidence from ECS estimates impacts warming projections. Removing historical evidence increases the probability of lower end of century warming compared to other scenarios. Excluding paleo_cold line of evidence also increases the length of the distribution tails. However, higher warming has a higher probability. 
+
