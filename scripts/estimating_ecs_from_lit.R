@@ -16,21 +16,21 @@ lognorm <- function(m, sd){
 
 # estimatin sigma from confidence intervals assuming sufficiently large sample size
 
-estimate_sigma <- function(ci_5_95, ci_17_84) {
+estimate_sigma <- function(ci_5_95, ci_17_83) {
   
   # Calculate the length of the CIs
-  ci_length_5_95 <- ci_5_95[2] - ci_5_95[1]
-  ci_length_17_84 <- ci_17_84[2] - ci_17_84[1]
+  percentile_length_5_95 <- ci_5_95[2] - ci_5_95[1]
+  percentile_length_17_83 <- ci_17_83[2] - ci_17_83[1]
   
   # Estimate sigma using the average of the CI lengths
-  sigma_5_95 <- ci_length_5_95 / (2 * qnorm(0.975)) # z-value for 95% CI
-  sigma_17_84 <- ci_length_17_84 / (2 * qnorm(0.84)) # z-value for 84% CI
+  sigma_5_95 <- percentile_length_5_95 / (2 * qnorm(0.95)) # z-value for 95%
+  sigma_17_83 <- percentile_length_17_83 / (2 * qnorm(0.83)) # z-value for 84%
   
   # Average the two estimates assuming they are equally important for the estimated
   # sigma.
   # Goal to provide a single values of the sd.
   # Trying to account for uncertainty associated with both confidence intervals.
-  estimated_sigma <- (sigma_5_95 + sigma_17_84) / 2
+  estimated_sigma <- (sigma_5_95 + sigma_17_83) / 2
   
   return(estimated_sigma)
   
@@ -67,7 +67,7 @@ no_paleo_cold <- 3.4
 no_paleo_cold_5_95 <- c(2.3, 5.1)
 no_paleo_cold_17_83 <- c(2.6, 4.1)
 
-n_samples <- 100000
+n_samples <- 1000000
 
 # estimate sigma
 sigma_baseline <- estimate_sigma(baseline_5_95, baseline_17_83)
