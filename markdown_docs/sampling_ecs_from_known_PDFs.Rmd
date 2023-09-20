@@ -1,5 +1,5 @@
 ---
-title: "sampling_ecs_from_known_PDFs"
+title: "Sampling ECS Usign Monte Carlo Estimation"
 author: "Joe Brown"
 date: "2023-09-14"
 output: html_document
@@ -177,7 +177,7 @@ for (i in 1:length(scenarios)) {
   
   sigma = estimate_sigma(ci_5_95, ci_17_83)
   
-  n = 1000
+  n = 15500
   
   samples = generate_lognormal_samples(mu = mu, sigma = sigma, n_samples = n)
   

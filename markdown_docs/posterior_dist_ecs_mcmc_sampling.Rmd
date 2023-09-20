@@ -1,0 +1,125 @@
+---
+title: "Posterior Distributions of ECS Using MCMC Sampling"
+author: "Joe Brown"
+date: "2023-09-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Goal 
+
+The goal of this document is to work through use of `rjags` to conduct MCMC sampling to estimate ECS probability distributions using data synthesized from Sherwood et al. 2020.
+
+I want to use MCMC to estimate the posterior distribution of key parameters ($\mu$ and $\sigma$) in a Bayesian model for ECS. We will use samples from the posterior PDFs of the parameters to simulate ECS values. This method should capture the full uncertainty in the parameters. MCMC sampling will estimate the full uncertainty for the ECS parameters.  
+
+Once the posterior distributions of the parameters are obtained, I can sample $\mu$ and $\sigma$ values from these distributions. Then, given those sampled parameter values, I can simulate ECS values. 
+
+This document will also go through different assessments of convergence. I will also compare means, percentiles, SD, and density curves to show that the MCMC estimate closely aligns with the prior estimates synthesized from the Sherwood et al 2020 information. 
+
+Finally, with the simulated ECS values, I can propagate the uncertainty of ECS through Hector using Matilda to simulate temperature projections. This can be viewed as secondary uncertainty propagation and assesses the impact of ECS parameter uncertainty on climate variable predictions. 
+
+For this example I am using the information reported as the baseline ECS estimation in Sherwood et al. 2020. 
+
+# Model Specification 
+
+We start by specifying the hierarchical structure of the model. Usually, we start with the likelihood:
+
+$$ 
+y_i | \mu, \sigma^2 \sim^{iid} N(\mu, \sigma^2) 
+$$
+So, ECS ($y$) of iteration $i$ , given the parameters $\mu$ and $\sigma^2$ (conditional upon those parameters) $y_i$ comes from a normal distribution that is independent and identically distributed ($iid$), where the normal distribution has a mean $\mu$ and variance $\sigma^2$.  
+
+The next level of the hierarchy is the prior distributions for $\mu$ and $\sigma^2$. The conjugate prior for $\mu$ when the value of $\sigma^2$ is known is a normal distribution, and the conjugate prior for $\sigma^2$ when $\mu$ is known is the inverse gamma distribution ($IG$). These seem like reasonable choices given our problem so we can use them. I will also make the assumption that the priors are independent. 
+
+Prior on $\mu$ :
+
+$$
+\mu \sim N(\mu_o, \sigma^2_o)
+$$
+
+The hyperparameter $\mu_o$ is a prior value for the mean, and $\sigma^2_o$ is the variance of that prior mean value. When we code the model of this prior we will use the mean reported in Sherwood et al. for the line of evidence we are interested in and the variance will be a weakly informed prior.
+
+Prior on $\sigma^2$ :
+
+$$
+\sigma^2 \sim IG(\nu_o, \lambda_o)
+$$
+
+Here, the hyperparameter $\nu_o$ is defines the **shape** parameter and $\lambda_o$ is the **rate** parameter. Importantly, $\lambda_o$ is the inverse of the **scale** parameter $\theta$. So, $\lambda_o = 1 / \theta$.
+
+Therefore the full hierarchical model is:
+
+$$ 
+y_i | \mu, \sigma^2 \sim^{iid} N(\mu, \sigma^2) 
+$$
+
+$$
+\mu \sim N(\mu_o, \sigma^2_o)
+$$
+
+$$
+\sigma^2 \sim IG(\nu_o, \lambda_o)
+$$
+
+Once the model is described, we can see how data might be simulated from one level of the model to the next. First, start by simulating variables that don't have dependence on other variables ($\mu$ and $\sigma^2$, need a posterior to do this). Then given those simulated parameters, we can simulate other parameters down the chain.
+
+# MCMC using `rjags`
+
+Now that we have an idea of the hierarchical model, we can begin our MCMC analysis in R. 
+
+## Install/Load the libraries 
+
+First, it is important to note that `rjags` is an `R` interface for `JAGS`. So you have to download `JAGS` before you are able to use the `R` interface. You can browse though `JAGS` information [here](https://mcmc-jags.sourceforge.io/).
+
+```{r}
+# Load libraries after install
+
+library(rjags)
+library(coda)
+library(ggplot2)
+library(matilda)
+
+```
+
+There are four basic steps when working in `rjags`:
+
+1. Specify the model 
+
+2. Set-up the model 
+
+3. Run the MCMC sampler
+
+4. Complete any post-processing
+
+## Model Specification in `rjags`
+
+Write the hierarchical model as a string
+```{r}
+# write hierarchical model as a sting
+mod_string <-" model{
+  
+  for (i in 1:n) {
+    y[i] ~ dnorm(mu, tau)
+  }
+  
+  mu ~ dnorm(3.2, 1)
+  sigma2 ~ dgamma(5, 1 / rate)
+  rate = 1.0
+  tau = 1/sigma2
+  sigma = sqrt(1 / tau)
+} "
+
+```
+
+The likelihood is written as a for loop  whereby $y_i$ follows a normal distribution with a mean $\mu$ and a precision of $\tau$. In `rjags` the precision = 1/$\sigma^2$, or 1/variance. This is a difference in how the normal distribution differs between `JAGS` and `R`.
+
+The prior for $\mu$ is assumed to follow a normal distribution with a mean $\mu_o$ = 3.2 (baseline mean from Sherwood et al.), and a weakly informative prior (large variance on $\mu$). There are two things to clarify here:
+
+1. It is possible to assume $\mu$ is known and assign it as a fixed value. However, then we don't explore that parameter space.
+
+2. Setting precision ($\tau = 1$) is a moderately informative prior allows the synthesized data to have influence over the final posterior estimate.
+
+The prior for $\sigma^2$ 
