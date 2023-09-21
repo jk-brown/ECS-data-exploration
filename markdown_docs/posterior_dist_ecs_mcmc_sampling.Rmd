@@ -74,7 +74,7 @@ Now that we have an idea of the hierarchical model, we can begin our MCMC analys
 
 First, it is important to note that `rjags` is an `R` interface for `JAGS`. So you have to download `JAGS` before you are able to use the `R` interface. You can browse though `JAGS` information [here](https://mcmc-jags.sourceforge.io/).
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 # Load libraries after install
 
 library(rjags)
@@ -94,9 +94,10 @@ There are four basic steps when working in `rjags`:
 
 4. Complete any post-processing
 
-## Model Specification in `rjags`
+## 1. Model Specification in `rjags`
 
-Write the hierarchical model as a string
+Write the hierarchical model as a string (this is a `JAGS` requirement):
+
 ```{r}
 # write hierarchical model as a sting
 mod_string <-" model{
@@ -106,20 +107,249 @@ mod_string <-" model{
   }
   
   mu ~ dnorm(3.2, 1)
-  sigma2 ~ dgamma(5, 1 / rate)
+  tau ~ dgamma(5, 1 / rate)
   rate = 1.0
-  tau = 1/sigma2
   sigma = sqrt(1 / tau)
 } "
 
 ```
 
-The likelihood is written as a for loop  whereby $y_i$ follows a normal distribution with a mean $\mu$ and a precision of $\tau$. In `rjags` the precision = 1/$\sigma^2$, or 1/variance. This is a difference in how the normal distribution differs between `JAGS` and `R`.
+Model string explanation:
 
-The prior for $\mu$ is assumed to follow a normal distribution with a mean $\mu_o$ = 3.2 (baseline mean from Sherwood et al.), and a weakly informative prior (large variance on $\mu$). There are two things to clarify here:
+The likelihood is written as a for loop where $y_i$ follows a normal distribution with mean $\mu$ and a precision of $\tau$. In `rjags` the precision = 1/$\sigma^2$, or 1/variance. This is different from the normal distribution in `R`.
 
-1. It is possible to assume $\mu$ is known and assign it as a fixed value. However, then we don't explore that parameter space.
+The prior for $\mu$ follows a normal distribution with a mean $\mu_o$ = 3.2 (baseline mean from Sherwood et al.), and a moderately informative $\sigma^2$. Two things to remember here:
 
-2. Setting precision ($\tau = 1$) is a moderately informative prior allows the synthesized data to have influence over the final posterior estimate.
+1. We could consider a known $\mu$. In this case, assign it as a fixed value. However, then we don't quantify the uncertainty on $\mu$.
 
-The prior for $\sigma^2$ 
+2. Setting precision ($\tau = 1$) as moderately informative prior allows the synthesized data to have influence over the final posterior estimate. I chose to do this because we have some idea of what $\sigma$ is from estimates using percentiles presented in Sherwood et al.
+
+The prior for $\sigma^2$ gets confusing (at least to me). The conjugate prior for $\sigma^2$ following a normal distribution with an informed mean is the inverse gamma distribution. Reminder that in `rjags`, $\tau = 1/\sigma^2$, therefore we need to estimate $\tau$ using the gamma distribution if we want the conjugate prior on $\sigma^2$ to be estimated from inverse gamma distribution.
+
+When the prior on $\tau$ is estimated, `rjags` uses `dgamma()`. The `rjags` documentation tells us that `dgamma()` takes the shape *r* and rate $\lambda$ (lambda) as arguments. So if you know the shape (usually presented as $\alpha$) and scale (usually presented as $\theta$) of the distribution, then need to provide the reciprocal of the scale $\theta$ to get the rate $\lambda$. If you know the rate, you can use that directly.
+
+Last, I add a piece to this model that will compute $\sigma$ directly from the model using $\tau$.
+
+It will be important to keep the user manual for `JAGS` handy to look-up how distributions are parameterized.
+
+With all of that explained, run the code to load the mod_string object.
+
+## 2. Set-up the model 
+
+First we want to enter or load the data. In our case we are producing syntheitc data from information published in Sherwood et al. 2020. Table 10 provides summary values for Mean and percentiles of their posterior PDFs for ECS (S). 
+
+We will use these values to produce our data (and we used some of this information to parameterize the priors for the model above). 
+
+First, we will use this function to estimate $\sigma$ from the percentiles provided in the paper:
+
+```{r}
+estimate_sigma <- function(per_5_95, per_17_83) {
+  
+  # Calculate the length of the percentiles
+  percentile_length_5_95 = per_5_95[2] - per_5_95[1]
+  percentile_length_17_83 = per_17_83[2] - per_17_83[1]
+  
+  # Estimate sigma using percentile lengths
+  sigma_5_95 = percentile_length_5_95 / (2 * qnorm(0.95)) 
+  sigma_17_83 = percentile_length_17_83 / (2 * qnorm(0.83)) 
+  
+  # Average the two estimates assuming they are equally important for the estimated
+  # sigma.
+  estimated_sigma = (sigma_5_95 + sigma_17_83) / 2
+  
+  return(estimated_sigma)
+}
+
+```
+
+This function is written specifically to use the information reported in Table 10 of Sherwood et al. One could also choose to use one percentile range or the other rather that using both.
+
+We also need another function that generates samples from the lognormal distribution as ECS is non-negative. 
+
+```{r}
+# lognormal function
+lognorm <- function(m, sd){
+  
+  # re-parameterization of supplied mean value
+  mn = log(m^2 / sqrt(sd^2 + m^2))
+  
+  # re-parameterization of supplied sd value
+  stdev = sqrt(log(1 + (sd^2 / m^2)))
+  
+  # stores new value in list - when pushed to rlnorm(), will provide normal distribution
+  # of arithmetic mean (m) and standard deviation (sd)
+  c(mn, stdev)
+  
+}
+
+# simulate data - based on Sherwood et al information
+generate_lognormal_samples <- function(mu, sigma, n_samples) {
+  
+  # Generate normally distributed samples in log-space
+  samples = rlnorm(n_samples, lognorm(mu, sigma) [1], lognorm(mu, sigma) [2])
+  
+  return(samples)
+}
+```
+
+The `lognorm()` function re-parameterizes the inputs to `rlnorm()`. This sampling procedure is what is used in the `Matilda` function `generate_params()`.
+
+Now that we have the functions that we need, we can use them to simulate data that will serve as observations in our MCMC sampler.
+
+```{r, results='hold'}
+# estimate sigma
+sigma <- estimate_sigma(per_5_95 = c(2.3, 4.7), per_17_83 = c(2.6, 3.9))
+
+# generate data
+set.seed(123)
+
+y <- generate_lognormal_samples(3.2, sigma, 1000)
+n <- length(y)
+```
+
+Before we can move on to running the model. We have to tell `JAGS`:
+
+1. Where the data are located.
+
+2. What are the parameters that we want sampled using the model.
+
+3. What initial values for the parameters. 
+
+When using `JAGS` we need to pass data that is in a list and the names of the variables have to be the same as those we provided in the model specification. 
+
+```{r}
+#set.seed for reproducibility
+set.seed(123)
+
+# create a list object for the data 
+data_jags <- list(y = y, n = n)
+
+```
+
+To specify the parameters, just pass a vector fo the parameters to an object. parameters should match those that you want sampled in the model. You don't have to sample all of them, but if you want to see them, they need to be specified in the params object. 
+
+```{r}
+# store params
+params <- c("mu", "tau", "sigma")
+
+```
+
+To pass initial values to `JAGS` we will write a function. This function will not take any arguments, but it will create a variable called `inits` and places that variable into a list. In this list we will create a value for each parameter in the model. 
+
+```{r}
+# build function to create list of initial values
+inits <-  function() { 
+  inits = list("mu" = runif(1), "tau" = runif(1)) 
+} 
+```
+
+There are several ways to specify initial values. You explicitly set using values you provide or they could be random, which is what I am doing here. Use `runif()` to produce a single random initial value for each parameter. 
+
+Make sure the the inits is programmed correctly. If you are not providing a fixed value for a parameter in the model, you need to supply an initial value, otherwise you will get an error when you try to run the model. 
+
+The final piece to set-up the model is to compile the model, we do this with `jags.model()`. In `jags.model()` we need to supply the model string as a readable text-mode connection (but only if the model is written in). We also supply the data and the initial values. 
+
+I specify that I want to run 2 chains because this will help to assess convergence later.
+
+```{r}
+mod <- jags.model(file = textConnection(mod_string), 
+                  data = data_jags, 
+                  inits = inits, 
+                  n.chains = 2)
+```
+
+Now that the model is initialized, we can run the MCMC sampler. 
+
+## 3. Run the MCMC Sampler
+
+There are two important functions for this step. The first is `update()` and the second is `coda.samples()`.
+
+The `update()` function basically serves as a burn-in phase, this is the practice of throwing out iterations at the beginning of the MCMC run. It will run the MCMC sampler for `n` iterations without saving the samples which gives the Markov chain time to find the stationary distribution.
+
+We need to pass the `update()` function our initiated model (`mod`) and some number of iterations to burn. 
+
+```{r}
+# use the update function to burn the first 500 samples. 
+update(mod, 500)
+
+```
+
+The `coda.samples()` function is where we run our Markov chain and keep the simulations. 
+
+we need to pass `coda.samples()` our initiated model (`mod`), the variable names which are stored in `params`, and the number of MCMC iterations we want - I am using 15000. We don't need to specify initial values because we want this process to pick up where we left of after using `update()`. 
+
+```{r}
+mod_sim <- coda.samples(mod,
+                        variable.names = params,
+                        n.iter = 15000)
+```
+
+With this result we can check for convergence in the post-processing step.
+
+## 4. Post-processing
+
+During post-processing we evaluate the Markov chains we simulated to determine if they are suitable.
+
+This is where the `coda` package is particularly important.
+
+The first and simplest way to visualize our results is using a trace plot. 
+
+```{r}
+# print a trace plot
+plot(mod_sim)
+```
+
+The `plot()` function gives both a trace plot and an density estimate for the parameters we sampled. Also notice the pink chain overlaying the black chain on the trace plot, these represent the two chains we are running. A good indicator of convergence is if the trace plot is evenly bouncing around the stabilized distribution. 
+
+The distribution for each parameter is the posterior distribution for our parameters. A smooth and stable density around the parameters is a good indicator of convergence as well.
+
+We can also print summary information for the model:
+
+```{r}
+# print a summary of the MCMC sample
+summary(mod_sim)
+```
+
+This gives some information about the posterior distributions of the parameters. We can use these values as parameters when we sample further down the chain (for example, sampling ECS values).
+
+In addition to visualizing the trace plots and we can use some other diagnostics including effective sample size (ESS). High ESS values indicate that you have a high number of samples that are effectively independent. A rule of thumb it is a good goal to obtain an ESS $\ge$ 1000.
+
+Use the `effectiveSize()` function to print ESS values for each parameter:
+
+```{r}
+# print ESS values
+effectiveSize(mod_sim)
+```
+
+Another way to assess convergence is computing the Gelman-Rubin Diagnostic ($\hat{R}$). This diagnostic compares the variance of within-chain samples to the variance of between-chain samples. This can only be completed if more than one chain was run for the MCMC sampler. If the chains have converged, $\hat{R}$ will be close to 1. We should agian comput a diagnostic for each parameter. To compute $\hat{R}$ we will use the `gelman.diag()` function:
+
+```{r}
+# print Gleman-Diagnostic
+gelman.diag(mod_sim)
+```
+
+# Sampling ECS values 
+
+Now we can use the parameters $\mu$ and $\sigma$ to sample further down the chain (i.e., we can sample ECS). In this case we will sample ECS and plot the distribution against samples simulated using the mean and estimated $\sigma$ from Sherwood et al. The way I sample from the literature is a basic Monte Carlo simulation, which is what `Matilda` currently does. However, this method does not explore or quantify the uncertainty of the parameters $\mu$ and $\sigma$, which the MCMC methods does.  
+
+```{r, results='hide'}
+# simulate data using literature reported params vs. MCMC generated params 
+ECS_gen_param = data.frame(value = generate_lognormal_samples(3.2, 0.70, 10000),
+                           method = "gen_params")
+ECS_mcmc = data.frame(value = generate_lognormal_samples(3.21, 0.70, 10000),
+                      method = "mcmc")
+```
+
+When we plot these we will obviously get the same distribution being represented. 
+
+```{r}
+# plotting densities of simulated data by method by which we obtained parameters
+ggplot() +
+  geom_density(data = ECS_gen_param, aes( x = value),
+               color = "red") +
+  geom_density(data = ECS_mcmc, aes(x = value),
+               color = "dodgerblue") +
+  theme_light()
+```
+
+So all this really does it prove the concept of MCMC 
