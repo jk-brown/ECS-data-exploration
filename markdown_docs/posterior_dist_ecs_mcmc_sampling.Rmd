@@ -19,7 +19,7 @@ Once the posterior distributions of the parameters are obtained, I can sample $\
 
 This document will also go through different assessments of convergence. I will also compare means, percentiles, SD, and density curves to show that the MCMC estimate closely aligns with the prior estimates synthesized from the Sherwood et al 2020 information. 
 
-Finally, with the simulated ECS values, I can propagate the uncertainty of ECS through Hector using Matilda to simulate temperature projections. This can be viewed as secondary uncertainty propagation and assesses the impact of ECS parameter uncertainty on climate variable predictions. 
+Finally, with the simulated ECS values, I can propagate the uncertainty of ECS through Hector using Matilda to simulate temperature projections. This can be viewed as secondary uncertainty propagation and assesses the impact of ECS parameter uncertainty on climate variable predictions. We won't do this step in this document.
 
 For this example I am using the information reported as the baseline ECS estimation in Sherwood et al. 2020. 
 
@@ -352,4 +352,8 @@ ggplot() +
   theme_light()
 ```
 
-So all this really does it prove the concept of MCMC 
+So all this really does it prove the concept of MCMC. 
+
+But we would now have a PDF to sample from to build parameter sets for ECS using this baseline distribution. With those sets we can Use Matilda to assess how tis distribution impacts warming projections. 
+
+___
