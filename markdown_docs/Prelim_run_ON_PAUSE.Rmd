@@ -1,0 +1,140 @@
+---
+title: "Preliminary Run Using UL and US ECS Distributions"
+author: "Joe Brown"
+date: "2023-09-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Purpose and Goals 
+
+This document is meant to serve as a preliminary analysis for the full targeteed analysis of assessing the sensitivity of climate projections to ECS distributions derived from different lines of evidence.
+
+**Goals**:
+
+1. Conduct MCMC sampling to estimate ECS $\mu$ and $\sigma$ parameters, using data simulated from Sherwood et al. 2020. For the preliminary run, focus on UL and US ECS distirbutions.
+
+2. Use the parameters from the MCMC sampling procedure to simulate parameter sets for a Matilda run. 
+
+3. Run Matilda with parameter sets (one with UL ECS distribution and one with US distribution). Parallelize this to run each 2000 times for each. Determine the time savings as well.  
+
+4. Some plots to make - comparison of ECS distributions, Plot temperature projections with CIs (or percentiles), and compute probabilities and plot stacked bars showing the probability of warming.
+
+Libraries:
+
+```{r}
+library("rjags")
+library("coda")
+library("ggplot2")
+library("matilda")
+library("doSNOW")
+```
+
+Functions:
+```{r}
+# estimating sigma from percentile values
+estimate_sigma <- function(per_5_95, per_17_83) {
+  
+  # Calculate the length of the percentiles
+  percentile_length_5_95 <- per_5_95[2] - per_5_95[1]
+  percentile_length_17_83 <- per_17_83[2] - per_17_83[1]
+  
+  # Estimate sigma using percentile lengths
+  sigma_5_95 <- percentile_length_5_95 / (2 * qnorm(0.95)) 
+  sigma_17_83 <- percentile_length_17_83 / (2 * qnorm(0.83)) 
+  
+  # Average the two estimates assuming they are equally important for the estimated
+  # sigma.
+  estimated_sigma <- (sigma_5_95 + sigma_17_83) / 2
+  
+  return(estimated_sigma)
+}
+
+# reparameterizing rlnorm() parameters
+lognorm <- function(m, sd){
+  
+  # re-parameterization of supplied mean value
+  mn <- log(m^2 / sqrt(sd^2 + m^2))
+  
+  # re-parameterization of supplied sd value
+  stdev <- sqrt(log(1 + (sd^2 / m^2)))
+  
+  # stores new value in list - when pushed to rlnorm(), will provide normal distribution
+  # of arithmetic mean (m) and standard deviation (sd)
+  c(mn, stdev)
+  
+}
+
+# generates lognormal distirbutions
+generate_lognormal_samples <- function(mu, sigma, n_samples) {
+  
+  # Generate normally distributed samples in log-space
+  samples <- rlnorm(n_samples, lognorm(mu, sigma) [1], lognorm(mu, sigma) [2])
+  
+  return(samples)
+}
+```
+
+
+## MCMC Sampling
+
+In the future I want experiment automating this with a loop. Will look into using `gsub()` for this.
+
+For now I will do them separately.
+
+### MCMC sample for UL distribution (mu = 3.2, 5-95% = 2.3-4.7, 17-83% = 2.6-3.9)
+
+1. Write out the heirarchical model string:
+
+```{r}
+UL_mod_string <- " model{
+
+  for (i in 1:n) {
+    y[i] ~ dnorm(mu, tau)
+  }
+
+  mu ~ dnorm(3.2, 1)
+  tau ~ dgamma(5, 1 / rate)
+  rate = 1.0
+  sigma = sqrt(1 / tau)
+} "
+```
+
+2. Simulate data and create `JAGS` data list:
+
+```{r}
+# estimate sigma
+UL_sigma <- estimate_sigma(per_5_95 = c(2.3, 4.7), per_17_83 = c(2.6, 3.9))
+
+# generate data
+set.seed(123)
+
+# simulate data
+UL_dat <- generate_lognormal_samples(3.2, UL_sigma, 1000)
+n <- length(UL_dat)
+
+# JAGS data list
+UL_data_jags <- list(y = UL_dat, n = n)
+```
+
+3. Specify, store parameters and create list of initial values:
+
+```{r}
+# parameter list
+UL_params <- c ("mu", "tau", "sigma")
+
+# initial values 
+inits <-  function() {
+  inits = list("mu" = runif(1), "tau" = runif(1), "sigma" = runif(1))
+}
+```
+
+4. Intialize the model using `jags.model()`:
+
+```{r}
+UL_mod <- jags.model(UL_mod_string, data = )
+```
+
