@@ -1,0 +1,86 @@
+---
+title: "Prior Predictive Distribution Sensitivity Test"
+author: "Joe Brown"
+date: "2023-10-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Prior Predictive Distirbution Sensitivity Test
+
+PPD - the distribution of data we think we would obtain before observing any data. 
+
+```{r, message=FALSE}
+library(rjags)
+library(coda)
+library(ggplot2)
+```
+
+## `dlnorm` on ECS
+
+### Weak prior: writing model for `rjags`
+
+Write model string using `dlnorm()` to estimate ECS mean and sigma (using informed prior on tau):
+```{r}
+mod_1 <-" model{
+  
+  ECS ~ dlnorm(mu, tau)
+  sigma = sqrt(1 / tau)
+  
+  mu = 3.2
+  tau ~ dgamma(4, 1)
+
+} "
+```
+
+Set-up, initiate, and run:
+```{r}
+# parameters of interest
+params = c("tau", "sigma", "ECS")
+
+# initial parameter values (random value)
+inits = function() { 
+  inits = list("tau" = runif(1), 
+               "ECS" = runif(1)) 
+} 
+
+# Compile the model - jags.model()
+mod_1 = jags.model(textConnection(mod_1), data = NULL, inits = inits, n.chains = 2)
+
+# run the mcmc sampler 
+# update = burn-ins
+update(mod_1, 500)
+
+# simulate samples for parameters
+mod_1_sim = coda.samples(mod_1, variable.names = params, n.iter = 15000)
+```
+
+Visualize and summarize:
+```{r}
+plot(mod_1_sim)
+summary(mod_1_sim)
+```
+
+Sample and plot?
+
+I think `dlnorm()` gives a value on original scale, need to take log of ECS:
+```{r, eval=FALSE}
+# sample the PPD
+mod_1_mcmc = data.frame(
+  value = generate_lognormal_samples(mu = log(29.5), sigma = 0.56, 10000), #use values from MCMC
+  meth = "mcmc")
+
+# plot samples
+ggplot() +
+  geom_density(data = mod_1_mcmc, aes(x = value),
+               color = "dodgerblue") +
+  theme_light()
+
+# compute percentiles - compare to Sherwood table 10
+percentiles = c(0.05, 0.17, 0.50, 0.83, 0.95)
+result = quantile(mod_1_mcmc$value, probs = percentiles)
+result
+```

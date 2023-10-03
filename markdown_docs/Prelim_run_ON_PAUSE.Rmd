@@ -25,12 +25,11 @@ This document is meant to serve as a preliminary analysis for the full targeteed
 
 Libraries:
 
-```{r}
+```{r, message=FALSE}
 library("rjags")
 library("coda")
 library("ggplot2")
 library("matilda")
-library("doSNOW")
 ```
 
 Functions:
@@ -133,8 +132,4 @@ inits <-  function() {
 ```
 
 4. Intialize the model using `jags.model()`:
-
-```{r}
-UL_mod <- jags.model(UL_mod_string, data = )
-```
 

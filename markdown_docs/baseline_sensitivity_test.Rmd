@@ -1,0 +1,450 @@
+---
+title: "Notes_bayes_ecs"
+author: "Joe Brown"
+date: "2023-10-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Goal 
+
+The goal of this document is to work through use of `rjags` to conduct MCMC sampling to estimate ECS probability distributions using data highlighted in Sherwood et al. 2020 (Table 10).
+
+I want to use MCMC to estimate the posterior distribution of key parameters ($\mu$ and $\sigma$) in a Bayesian model for ECS. I will use samples from the posterior PDF of the parameters to simulate ECS values. This method should capture the full uncertainty in the parameters,a nd thus MCMC sampling will estimate the full uncertainty for the ECS parameters.  
+
+Once the posterior distributions of the parameters are obtained, I can use those $\mu$ and $\sigma$ values to simulate ECS values.
+
+This document will also go through different assessments of convergence. I will also compare percentiles with those reported in SHerwood et al. 2020 (table 10) to ensure the PDF is replicated accurately. Can view this entire process as a method of configurign and sampling the ECS PDFs in Sherwood et al.  
+
+For this example I am using the information reported as the baseline ECS estimation in Sherwood et al. 2020. 
+
+Additionally, it may be worth considering the use of data constrained by historical data in Matilda (not sure about this yet)?
+
+# Model Specification 
+
+Specify the hierarchical structure of the model, beginning with the likelihood:
+
+$$ 
+y_i | \mu, \sigma^2 \sim logN(\mu, \sigma^2) 
+$$
+Where ($y_i$) is an iteration $i$ of ECS, given the parameters $\mu$ and $\sigma^2$ (so, conditional upon those parameters) $y_i$ comes from a lognormal distribution with a mean $\mu$ and variance $\sigma^2$.
+
+The next level of the hierarchy is the prior distributions for $\mu$ and $\sigma^2$. Since Sherwood et al. report mean values for thie distirbutions I will use a fixed $\mu$, this value comes from data in Table 10.
+
+```{r, echo=FALSE}
+knitr::include_graphics("table_10.png")
+```
+
+The conjugate prior for $\sigma^2$ when $\mu$ is known is the inverse gamma distribution ($IG$). That seems like reasonable choice given this problem so I use it here. I will also make the assumption that the priors are independent. 
+
+Prior on $\sigma^2$ :
+
+$$
+\sigma^2 \sim IG(\nu_o, \lambda_o)
+$$
+
+Here, the hyperparameter $\nu_o$ is defines the **shape** parameter and $\lambda_o$ is the **rate** parameter. Importantly, $\lambda_o$ is the inverse of the **scale** parameter $\theta$. So, $\lambda_o = 1 / \theta$.
+
+Below I conduct a sensitivity test by altering the priors applied to $\sigma^2$. I will plot each individually and then will compare all posteriors at the end with some robustness stats. 
+
+In the first iteration of the sensitivity test walk through the MCMC methods (modeling and sampling steps), for the others I will just provide the code.
+____
+
+# Install/Load the libraries 
+
+**NOTE**: `rjags` is an `R` interface for `JAGS`. Download `JAGS` before using the`R` interface. Browse though `JAGS` information [here](https://mcmc-jags.sourceforge.io/).
+
+```{r, message=FALSE, warning=FALSE}
+# Load libraries after install
+library(rjags)
+library(coda)
+library(ggplot2)
+library(matilda)
+
+# source functions
+source("log_functions.R")
+
+```
+
+# MCMC using `rjags`
+
+Using the information highlighted in the hierarchical structure of the model above, begin MCMC analysis in R. 
+
+There are four basic steps when working in `rjags`:
+
+1. Specify the model
+
+2. Set-up the model 
+
+3. Run the MCMC sampler
+
+4. Complete any post-processing
+
+## Model Specification for prior (1) in `rjags`
+
+Write the hierarchical model as a string (this is a `JAGS` requirement):
+
+```{r}
+# write hierarchical model as a sting
+mod_1_string <-" model{
+  
+  for (i in 1:n) {
+    y[i] ~ dlnorm(mu, tau)
+  }
+  
+  mu = 3.2
+  tau ~ dunif(0, 20)
+  
+  sigma = sqrt(1 / tau)
+  
+  # ouput
+  log_sigma = log(sigma)
+  
+} "
+
+```
+
+**Model string explanation:**
+
+The likelihood is written as a for loop where $y_i$ follows a lognormal distribution with mean $\mu$ = 3.2 and a precision of $\tau$. In `rjags` the precision = 1/$\sigma^2$, or 1/variance. This is different from the normal distribution in `R`.
+
+Here I am not setting a prior on $\mu$ because i am using a fixed value. The prior on $\sigma^2$ is weakly informative. 
+
+The weakly informative prior allows the data to have influence over the final posterior estimate.
+
+I add a piece to this model that will compute $\sigma$ directly from the model using $\tau$.
+
+**Note:** keep the user manual for `JAGS` handy to look-up how distributions are parameterized.
+
+## Set-up the model 
+
+First, enter or load the data. In this case, I am using the data presented as summary statistics in Sherwood et al. 2020. Table 10 (printed above) provides summary values for posterior PDFs for ECS (S). We will also specify the sample size.
+
+Data input:
+```{r}
+data <- c(2.3, 2.6, 3.1, 3.9, 4.7, 3.0, 3.0, 3.2)
+n <- length(data)
+```
+*Adding two 3.0 values because this number represents the mode of the distribution.*
+
+Before running the model. `JAGS` needs some required information:
+
+1. Where the data are located.
+
+2. What are the parameters that we want sampled using the model.
+
+3. What are the initial values for the parameters. 
+
+When using `JAGS`, pass data in a list. The names of the variables must be the same as in the model specification.
+
+```{r}
+# create a list object for the data 
+data_jags <- list(y = data, n = n)
+```
+
+Parameters should match what we want sampled in the model. You don't have to sample all of them, but if you want to see them, they need to be specified in the params object.
+
+```{r}
+# store params
+params <- c("mu", "log_sigma")
+
+```
+
+To pass initial values, we will write a function. The function will not take any arguments, but it will create a variable called `inits` and places that variable into a list. In this list we will create a value for each parameter in the model. 
+
+```{r}
+# build function to create list of initial values
+inits <-  function() { 
+  inits = list("tau" = runif(1)) 
+}
+```
+
+There are several ways to specify initial values. You can explicitly set values or they could be random. I am using `runif()` to produce a single random initial value for the parameters that I am estimating the distribution for.
+
+Finally, I compile the model. I do this with `jags.model()`. In `jags.model()` I supply the model string as a readable text-mode connection (there are several ways to call the model as well). I also supply the data and the initial values. 
+
+I specify that I want to run 2 chains because this will help to assess convergence later.
+
+```{r}
+mod_1 <- jags.model(file = textConnection(mod_1_string), 
+                  data = data_jags, 
+                  inits = inits, 
+                  n.chains = 2)
+```
+
+## Run the MCMC Sampler
+
+There are two important functions for this step. The first is `update()` and the second is `coda.samples()`.
+
+The `update()` function serves as a burn-in phase, this is the practice of throwing out iterations at the beginning of the MCMC run. It will run the MCMC sampler for `n` iterations without saving the samples which gives the Markov chain time to find the stationary distribution.
+
+I pass my initiated model (`mod`) to `update()` with some number of iterations to burn. 
+
+```{r}
+# use the update function to burn the first 500 samples. 
+update(mod_1, 1000)
+
+```
+
+The `coda.samples()` function is where we run our Markov chain and keep the simulations. 
+
+I pass `coda.samples()` our initiated model (`mod`), the variable names which are stored in `params`, and the number of MCMC iterations I want (here, 15000). We don't need to specify initial values because we want this process to pick up where we left of after using `update()`. 
+
+```{r}
+mod_1_sim <- coda.samples(mod_1,
+                        variable.names = params,
+                        n.iter = 15000)
+```
+
+## Post-processing
+
+During post-processing I evaluate the simulated Markov chain to determine if they have converged.
+
+This is where the `coda` package is particularly important.
+
+The first and simplest way to visualize the results is using a trace plot. 
+
+```{r}
+# print a trace plot
+plot(mod_1_sim)
+```
+
+The `plot()` function gives both a trace plot and an density estimate for the sampled parameters. Notice a pink chain overlaying a black chain on the trace plot, these represent the two chains I ran. A good indicator of convergence is if the trace plot is evenly bouncing around the stabilized distribution. 
+
+The distribution for each parameter is the posterior distribution for our parameters. A smooth and stable density around the parameters is a good indicator of convergence as well.
+
+I also print summary information for the model:
+
+```{r}
+# print a summary of the MCMC sample
+summary_1 <- summary(mod_1_sim)
+summary_1
+```
+```{r}
+ECS_mod_1 = data.frame(value = generate_lognormal_samples(3.2, summary_1$statistics[1, 1], 100000),
+                      method = "mcmc")
+```
+
+```{r}
+# plotting densities of simulated data by method by which we obtained parameters
+ggplot() +
+  geom_density(data = ECS_mod_1, aes(x = value),
+               color = "#0A9F9D", 
+               fill = "#0A9F9D",
+               alpha = 0.2) +
+  theme_light()
+```
+
+```{r}
+# summary statistics
+percentiles = c(0.05, 0.17, 0.50, 0.83, 0.95)
+mod_1_results = quantile(ECS_mod_1$value, probs = percentiles)
+mod_1_results
+
+```
+## Model Specification for prior (2) in `rjags`
+
+```{r}
+# write hierarchical model as a sting
+mod_2_string <-" model{
+  
+  for (i in 1:n) {
+    y[i] ~ dlnorm(mu, tau)
+  }
+  
+  mu = 3.2
+  tau ~ dgamma(0.1, 0.1)
+  
+  sigma = sqrt(1 / tau)
+  
+  # ouput
+  log_sigma = log(sigma)
+  
+} "
+
+```
+
+## Model set-up 
+
+Some of the information can be recycled from the previous analysis, including the data and parameters.
+
+Re-run the `inits` block to be safe and make sure I am resetting the initial values in the model.
+
+```{r}
+# build function to create list of initial values
+inits <-  function() { 
+  inits = list("tau" = runif(1)) 
+}
+```
+
+Initiate the model 
+```{r}
+mod_2 <- jags.model(file = textConnection(mod_2_string), 
+                  data = data_jags, 
+                  inits = inits, 
+                  n.chains = 2)
+```
+
+## Run the MCMC Sampler
+
+```{r}
+# use the update function to burn the first 500 samples. 
+update(mod_2, 1000)
+
+```
+
+```{r}
+mod_2_sim <- coda.samples(mod_2,
+                        variable.names = params,
+                        n.iter = 15000)
+```
+
+## Post-processing 
+
+```{r}
+# print a trace plot
+plot(mod_2_sim)
+```
+
+```{r}
+# print a summary of the MCMC sample
+summary_2 <- summary(mod_2_sim)
+summary_2
+```
+
+```{r}
+ECS_mod_2 = data.frame(value = generate_lognormal_samples(3.2, summary_2$statistics[1, 1], 100000),
+                      method = "mcmc")
+```
+
+```{r}
+# plotting densities of simulated data by method by which we obtained parameters
+ggplot() +
+  geom_density(data = ECS_mod_2, aes(x = value),
+               color = "#CEB175", 
+               fill = "#CEB175",
+               alpha = 0.2) +
+  theme_light()
+```
+```{r}
+# summary statistics
+percentiles = c(0.05, 0.17, 0.50, 0.83, 0.95)
+mod_2_results = quantile(ECS_mod_2$value, probs = percentiles)
+mod_2_results
+
+```
+
+## Model Specification for prior (3) in `rjags`
+
+```{r}
+# write hierarchical model as a sting
+mod_3_string <-" model{
+  
+  for (i in 1:n) {
+    y[i] ~ dlnorm(mu, tau)
+  }
+  
+  mu = 3.2
+  tau ~ dgamma(1, 2)
+  
+  sigma = sqrt(1 / tau)
+  
+  # ouput
+  log_sigma = log(sigma)
+  
+} "
+
+```
+
+## Model set-up 
+
+Some of the information can be recycled from the previous analysis, including the data and parameters.
+
+Re-run the `inits` block to be safe and make sure I am resetting the initial values in the model.
+
+```{r}
+# build function to create list of initial values
+inits <-  function() { 
+  inits = list("tau" = runif(1)) 
+}
+```
+
+Initiate the model 
+```{r}
+mod_3 <- jags.model(file = textConnection(mod_3_string), 
+                  data = data_jags, 
+                  inits = inits, 
+                  n.chains = 2)
+```
+
+## Run the MCMC Sampler
+
+```{r}
+# use the update function to burn the first 500 samples. 
+update(mod_3, 1000)
+
+```
+
+```{r}
+mod_3_sim <- coda.samples(mod_3,
+                        variable.names = params,
+                        n.iter = 15000)
+```
+
+## Post-processing 
+
+```{r}
+# print a trace plot
+plot(mod_3_sim)
+```
+
+```{r}
+# print a summary of the MCMC sample
+summary_3 <- summary(mod_3_sim)
+summary_3
+```
+
+```{r}
+ECS_mod_3 = data.frame(value = generate_lognormal_samples(3.2, summary_3$statistics[1, 1], 100000),
+                      method = "mcmc")
+```
+
+```{r}
+# plotting densities of simulated data by method by which we obtained parameters
+ggplot() +
+  geom_density(data = ECS_mod_3, aes(x = value),
+               color = "#E54E21", 
+               fill = "#E54E21",
+               alpha = 0.2) +
+  theme_light()
+```
+
+```{r}
+# summary statistics
+percentiles = c(0.05, 0.17, 0.50, 0.83, 0.95)
+mod_3_results = quantile(ECS_mod_3$value, probs = percentiles)
+mod_3_results
+
+```
+
+## Comparing posterior densities
+
+```{r}
+ggplot() +
+  geom_density(data = ECS_mod_1, aes(x = value),
+               color = "#0A9F9D", 
+               fill = "#0A9F9D",
+               alpha = 0.2) +
+  geom_density(data = ECS_mod_2, aes(x = value),
+               color = "#CEB175", 
+               fill = "#CEB175",
+               alpha = 0.2) +
+  geom_density(data = ECS_mod_3, aes(x = value),
+               color = "#E54E21", 
+               fill = "#E54E21",
+               alpha = 0.2) +
+  theme_light()
+```

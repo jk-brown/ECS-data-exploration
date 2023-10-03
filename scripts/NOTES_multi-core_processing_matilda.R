@@ -3,9 +3,9 @@ library(doSNOW)
 library(matilda)
 
 # Create a cluster with two workers (you can adjust this number as needed)
-cluster <- makeCluster(3, type = "SOCK")
-registerDoSNOW(cluster)
-clusterEvalQ(cluster, library(matilda))
+clus <- makeCluster(7, type = "SOCK")
+registerDoSNOW(clus)
+clusterEvalQ(clus, library(matilda))
 
 start <- Sys.time()
 result_p <- foreach(evidence_name = names(ecs_samples), .combine = "rbind") %dopar% {
@@ -23,7 +23,6 @@ result_p <- foreach(evidence_name = names(ecs_samples), .combine = "rbind") %dop
   model <- matilda::iterate_model(
     core_245,
     params = param_values,
-    save_years = 1850:2100,
     save_vars = c(GMST(), CONCENTRATIONS_CO2())
   )
   

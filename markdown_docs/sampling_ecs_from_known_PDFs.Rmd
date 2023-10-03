@@ -177,7 +177,7 @@ for (i in 1:length(scenarios)) {
   
   sigma = estimate_sigma(ci_5_95, ci_17_83)
   
-  n = 15500
+  n = 10000
   
   samples = generate_lognormal_samples(mu = mu, sigma = sigma, n_samples = n)
   
@@ -233,7 +233,7 @@ core_245 <- newcore(ini, name = "SSP2-4.5")
 Now we will generate parameter values, but we want to omit ECS values and replace them with the values we sampled above:
 ```{r, message=FALSE}
 set.seed(123)
-param_values = generate_params(core_245, 1000)
+param_values = generate_params(core_245, 10000)
 param_values$ECS = NULL
 
 # Create a list to store results
