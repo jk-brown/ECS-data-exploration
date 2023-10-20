@@ -2,7 +2,9 @@
 title: "Programmatic Sensitivity Tests"
 author: "Joe Brown"
 date: "2023-10-03"
-output: html_document
+output: 
+  html_document:
+    toc: true
 ---
 
 ```{r setup, include=FALSE}
@@ -13,16 +15,16 @@ knitr::opts_chunk$set(echo = TRUE)
 
 Programming sensitivity tests across bulk data information. See the R markdown document working through the baseline prior sensitivity test for a breakdown of what each iteration here is attempting (file = baseline_sensitivity_test.Rmd).
 
-# Load Libraries ans source funcitons
+# Load Libraries and source functions
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 # load libraries
 library(ggplot2)
 library(rjags)
 library(coda)
 
 # source functions
-source("markdown_docs/log_functions.R")
+source("log_functions.R")
 ```
 
 # Analysis 
@@ -37,7 +39,7 @@ I am using the fixed mean values reported in the table as my mean in the MCMC, w
 
 ```{r}
 # list fixed mean values
-mean_value <- c(3.2, 3.3, 3.1, 3.8, 3.3)
+mean_value <- c(3.2, 3.3, 3.1, 3.8, 3.3, 3.4)
 ```
 
 ```{r}
@@ -52,6 +54,8 @@ no_paleo = c(2.2, 2.6, 3.3, 4.6, 6.4, 2.9, 2.9, 3.8)
 n_npa = length(no_paleo)
 fat_tails = c(2.2, 2.5, 3.1, 4.0, 4.9, 2.8, 2.8, 3.3)
 n_ft = length(fat_tails)
+EC_UL = c(2.4, 2.7, 3.2, 4.0, 4.8, 3.1, 3.1, 3.4)
+n_EC = length(EC_UL)
 ```
 
 Place data into a list to pass to `JAGS`:
@@ -61,27 +65,39 @@ dat <- list(
   no_process_jags = list(y = no_process, n = n_np),
   no_historical_jags = list(y = no_historical, n = n_nh),
   no_paleo_jags = list(y = no_paleo, n = n_npa),
-  fat_tails_jags = list(y = fat_tails, n = n_ft)
+  fat_tails_jags = list(y = fat_tails, n = n_ft),
+  EC_UL_jags = list(y = EC_UL, n = n_EC)
 )
 ```
 
+## Prior 1
 
-Specify the model:
+Model structure:
+$$ 
+y_i | \mu, \sigma^2 \sim logN(\mu, \sigma^2) 
+$$
+$$
+\mu\ \sim logN(\mu_o, \sigma^2_o)
+$$
+
+$$
+\sigma^2 \sim U(0, 10)
+$$
+
+Specify the model for Prior 1:
 ```{r}
 mod1_string <- " model {
  
  # likelihood
  for (i in 1:n) {
- y[i] ~ dlnorm(mu, tau)
+ y[i] ~ dnorm(mu, tau)
  }
  
  # prior
  mu = fixed_mu
- tau ~ dunif(0, 10)
- 
- # ouput
- sigma = sqrt(1 / tau)
- log_sigma = log(sigma)
+ sigma2 ~ dunif(0, 10) 
+ tau = 1 / (sigma2)
+ sigma = sqrt(sigma2)
  
 }"
 ```
@@ -90,34 +106,37 @@ Specify initial values:
 ```{r}
 # specifying initial values
 inits <- function() {
-  inits = list("tau" = runif(1))
+  inits = list("sigma2" = runif(1))
 }
 ```
 
 Specify params:
 ```{r}
-params <- c("mu", "log_sigma")
+params <- c("sigma", "mu")
 ```
 
 
 Create a results list to store results:
 ```{r}
-results <- list()
+mod1_simulations <- list()
 ```
 
-Loop the mod1 across each data set with its corresponding fixed mean value:
+Loop the mod1 across each data set with its corresponding fixed mean value. this produces a list of model simulations:
 ```{r, results='hide'}
+# Loop through dat
 for (i in 1:length(dat)) {
   
-  # identify jags data before initializing and running model
-  data_jags = dat[[i]]
-  
-  # mean value
-  fixed_mu = mean_value[i]
-  
-  mod1_string <- gsub("fixed_mu", as.character(fixed_mu), mod1_string)
-  
-  mod1 <- jags.model(textConnection(mod1_string), 
+  # Identify jags data before initializing and running the model
+  data_jags <- dat[[i]]  # Use double brackets to access the list element
+
+  # Extract the corresponding mean value
+  fixed_mu <- mean_value[i]
+
+  # Replace "fixed_mu" in the model string with the current mean value
+  current_mod1_string <- gsub("fixed_mu", as.character(fixed_mu), mod1_string)
+
+  # Initialize and run the JAGS model with the current model string
+  mod1 <- jags.model(textConnection(current_mod1_string), 
                      data = data_jags,
                      inits = inits,
                      n.chains = 2)
@@ -127,23 +146,42 @@ for (i in 1:length(dat)) {
                            variable.names = params,
                            n.iter = 15000)
   
-  results_name <- names(dat)[i]
-  results[[results_name]] <- summary(mod1_sim)
+  # Store the model simulations with a name from the dat list
+  simulation_name <- names(dat)[i]
+  mod1_simulations[[simulation_name]] <- mod1_sim
+}
+
+```
+
+Plot trace plots to assess convergence and store summary statistics for each line of evidence:
+```{r}
+summary1 <- list()
+
+for (i in 1:length(mod1_simulations)) {
+
+  trace_plot = plot(mod1_simulations[[i]],
+                    main = paste("Trace Plot for Evidence",
+                                 names(mod1_simulations)[i])) 
+  
+  stats <- summary(mod1_simulations[[i]])
+  
+  summary_name <- names(mod1_simulations)[i]
+  summary1[[summary_name]] <- stats
     
-  }
+}
 ```
 
 Generate samples to plot posterior densities:
 ```{r}
 samples <- list()
 
-for (i in 1:length(results)) {
+for (i in 1:length(summary1)) {
   
   # mu for sample generator
-  mu_val = mean_value[i]
+  mu_val = summary1[[i]]$statistics[1, 1]
   
   # sigma for sample generator
-  sigma_val = results[[i]]$statistics[1, 1]
+  sigma_val = summary1[[i]]$statistics[2, 1]
   
   # generate values
   ECS_samples = generate_lognormal_samples(mu = mu_val, 
@@ -151,7 +189,7 @@ for (i in 1:length(results)) {
                                            n_samples = 100000)
   
   # get names for evidence
-  evidence = names(results)[i]
+  evidence = names(summary1)[i]
   
   # store dfs in list
   samples[[evidence]] <- data.frame(ECS_samples = ECS_samples, Evidence = evidence)
@@ -163,18 +201,340 @@ Bind the list together to make a df of samples for each line of evidence for thi
 ```{r}
 ECS_prior1 <- do.call(rbind, samples)
 
+# add column to specify prior number
+ECS_prior1$prior <- c("Uniform")
+
 # reset row names to NULL
 row.names(ECS_prior1) <- NULL
 ```
 
-Plot posterior densities for this prior for each line of evidence:
+```{r}
+stats1 <- list()
+
+for (i in 1:length(samples)) {
+  percentiles = c(0.05, 0.17, 0.50, 0.83, 0.95)
+  
+  mod_1_percentiles = quantile(samples[[i]][, 1], probs = percentiles)
+  
+  # get names for evidence
+  evidence = names(samples)[i]
+  
+  stats1[[evidence]] <- mod_1_percentiles
+}
+```
+
+## Prior 2
+
+Model structure:
+$$ 
+y_i | \mu, \sigma^2 \sim logN(\mu, \sigma^2) 
+$$
+
+$$
+\mu\ \sim logN(\mu_o, \sigma^2_o)
+$$
+
+$$
+\sigma^2 \sim IG(0.001, 0.001)
+$$
+
+Specify the model for Prior 2:
+```{r}
+mod2_string <- " model {
+ 
+ # likelihood
+ for (i in 1:n) {
+ y[i] ~ dnorm(mu, tau)
+ }
+ 
+ # prior
+ mu = fixed_mu
+ sigma2 ~ dgamma(100, 100) 
+ tau = 1 / (sigma2)
+ sigma = sqrt(sigma2)
+ 
+}"
+```
+
+Specify initial values:
+```{r}
+# specifying initial values
+inits <- function() {
+  inits = list("sigma2" = runif(1))
+}
+```
+
+Specify params:
+```{r}
+params <- c("mu", "sigma")
+```
+
+Create a results list to store results:
+```{r}
+mod2_simulations <- list()
+```
+
+Loop the mod1 across each data set with its corresponding fixed mean value. this produces a list of model simulations:
+```{r, results='hide'}
+# Loop through dat
+for (i in 1:length(dat)) {
+  
+  # Identify jags data before initializing and running the model
+  data_jags <- dat[[i]]  # Use double brackets to access the list element
+
+  # Extract the corresponding mean value
+  fixed_mu <- mean_value[i]
+
+  # Replace "fixed_mu" in the model string with the current mean value
+  current_mod2_string <- gsub("fixed_mu", as.character(fixed_mu), mod2_string)
+
+  # Initialize and run the JAGS model with the current model string
+  mod2 <- jags.model(textConnection(current_mod2_string), 
+                     data = data_jags,
+                     inits = inits,
+                     n.chains = 2)
+  
+  update(mod2, 1000)
+  mod2_sim <- coda.samples(mod2,
+                           variable.names = params,
+                           n.iter = 15000)
+  
+  # Store the model simulations with a name from the dat list
+  simulation_name <- names(dat)[i]
+  mod2_simulations[[simulation_name]] <- mod2_sim
+}
+```
+
+Plot trace plots to assess convergence and store summary statistics for each line of evidence:
+```{r}
+summary2 <- list()
+
+for (i in 1:length(mod2_simulations)) {
+
+  trace_plot = plot(mod2_simulations[[i]],
+                    main = paste("Trace Plot for Evidence",
+                                 names(mod2_simulations)[i])) 
+  
+  stats <- summary(mod2_simulations[[1]])
+  
+  summary_name <- names(mod2_simulations)[i]
+  summary2[[summary_name]] <- stats
+    
+}
+```
+
+Generate samples to plot posterior densities:
+```{r}
+samples2 <- list()
+
+for (i in 1:length(summary2)) {
+  
+  # mu for sample generator
+  mu_val = summary2[[i]]$statistics[1, 1]
+  
+  # sigma for sample generator
+  sigma_val = summary2[[i]]$statistics[2, 1]
+  
+  # generate values
+  ECS_samples2 = generate_lognormal_samples(mu = mu_val, 
+                                           sigma = sigma_val, 
+                                           n_samples = 100000)
+  
+  # get names for evidence
+  evidence = names(summary2)[i]
+  
+  # store dfs in list
+  samples2[[evidence]] <- data.frame(ECS_samples = ECS_samples2, Evidence = evidence)
+  
+}
+```
+
+Bind the list together to make a df of samples for each line of evidence for this prior
+```{r}
+ECS_prior2 <- do.call(rbind, samples2)
+
+# add prior column 
+ECS_prior2$prior <- c("IG_weak")
+
+# reset row names to NULL
+row.names(ECS_prior2) <- NULL
+```
+
+```{r}
+stats2 <- list()
+
+for (i in 1:length(samples2)) {
+  percentiles = c(0.05, 0.17, 0.50, 0.83, 0.95)
+  
+  mod_2_percentiles = quantile(samples2[[i]][, 1], probs = percentiles)
+  
+  # get names for evidence
+  evidence = names(samples2)[i]
+  
+  stats2[[evidence]] <- mod_2_percentiles
+}
+```
+
+
+## Prior 3
+
+Model structure:
+$$ 
+y_i | \mu, \sigma^2 \sim logN(\mu, \sigma^2) 
+$$
+
+$$
+\mu\ \sim logN(\mu_o, \sigma^2_o)
+$$
+
+$$
+\sigma^2 \sim IG(1, 1)
+$$
+
+
+Specify the model for Prior 3:
+```{r}
+mod3_string <- " model {
+ 
+ # likelihood
+ for (i in 1:n) {
+ y[i] ~ dnorm(mu, tau)
+ }
+ 
+ # prior
+ mu = fixed_mu
+ sigma2 ~ dgamma(0.33, 1) 
+ tau = 1 / (sigma2)
+ sigma = sqrt(sigma2)
+ 
+}"
+```
+
+Specify initial values:
+```{r}
+# specifying initial values
+inits <- function() {
+  inits = list("sigma2" = runif(1))
+}
+```
+
+The same params will be retrieved in this prior test as the last one. No need to re-run the code. 
+
+Create a results list to store results:
+```{r}
+mod3_simulations <- list()
+```
+
+Loop the mod1 across each data set with its corresponding fixed mean value. this produces a list of model simulations:
+```{r, results='hide'}
+# Loop through dat
+for (i in 1:length(dat)) {
+  
+  # Identify jags data before initializing and running the model
+  data_jags <- dat[[i]]  # Use double brackets to access the list element
+
+  # Extract the corresponding mean value
+  fixed_mu <- mean_value[i]
+
+  # Replace "fixed_mu" in the model string with the current mean value
+  current_mod3_string <- gsub("fixed_mu", as.character(fixed_mu), mod3_string)
+
+  # Initialize and run the JAGS model with the current model string
+  mod3 <- jags.model(textConnection(current_mod3_string), 
+                     data = data_jags,
+                     inits = inits,
+                     n.chains = 2)
+  
+  update(mod3, 1000)
+  mod3_sim <- coda.samples(mod3,
+                           variable.names = params,
+                           n.iter = 15000)
+  
+  # Store the model simulations with a name from the dat list
+  simulation_name <- names(dat)[i]
+  mod3_simulations[[simulation_name]] <- mod3_sim
+}
+```
+
+Plot trace plots to assess convergence and store summary statistics for each line of evidence:
+```{r}
+summary3 <- list()
+
+for (i in 1:length(mod3_simulations)) {
+
+  trace_plot = plot(mod3_simulations[[i]],
+                    main = paste("Trace Plot for Evidence",
+                                 names(mod3_simulations)[i])) 
+  
+  stats <- summary(mod3_simulations[[1]])
+  
+  summary_name <- names(mod3_simulations)[i]
+  summary3[[summary_name]] <- stats
+    
+}
+```
+
+Generate samples to plot posterior densities:
+```{r}
+samples3 <- list()
+
+for (i in 1:length(summary3)) {
+  
+  # mu for sample generator
+  mu_val = mean_value[i]
+  
+  # sigma for sample generator
+  sigma_val = summary3[[i]]$statistics[2, 1]
+  
+  # generate values
+  ECS_samples3 = generate_lognormal_samples(mu = mu_val, 
+                                           sigma = sigma_val, 
+                                           n_samples = 100000)
+  
+  # get names for evidence
+  evidence = names(summary3)[i]
+  
+  # store dfs in list
+  samples3[[evidence]] <- data.frame(ECS_samples = ECS_samples3, Evidence = evidence)
+  
+}
+```
+
+Bind the list together to make a df of samples for each line of evidence for this prior
+```{r}
+ECS_prior3 <- do.call(rbind, samples3)
+
+# add prior column 
+ECS_prior3$prior <- c("IG_moderate")
+
+# reset row names to NULL
+row.names(ECS_prior3) <- NULL
+```
+
+## Plot all posterior densities together
+
+Plot posterior densities for priors 1, 2, and 3 for each line of evidence:
 ```{r}
 ggplot() +
   geom_density(data = ECS_prior1, aes(x = ECS_samples),
-               color = "#0A9F9D", 
-               fill = "#0A9F9D",
-               alpha = 0.2) +
+               color = "#0A9F9D") +
+  geom_density(data = ECS_prior2, aes(x = ECS_samples),
+               color = "#CEB175") +
+  geom_density(data = ECS_prior3, aes(x = ECS_samples),
+               color = "#E54E21") +
   theme_light() +
   facet_wrap(~Evidence)
 ```
 
+
+```{r, message=FALSE}
+library(tidyverse)
+
+percentiles = c(0.05, 0.17, 0.50, 0.83, 0.95)
+
+ECS_stats <- ECS_prior3 %>% 
+  group_by(Evidence) %>% 
+  reframe(
+    ECS_percentiles = quantile(ECS_samples, percentiles)
+  )
+```

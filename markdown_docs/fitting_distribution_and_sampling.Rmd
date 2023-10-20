@@ -1,0 +1,244 @@
+---
+title: "Fitting distribution to Sherwood et al. data"
+author: "Joe Brown"
+date: "2023-10-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Goal
+
+Use `fitdistr()` to maximize the likelihood of distirbution parameters to fit a provided set of data. I am using this as a quick and easy way to propose distributions for Sherwood et al. 2020 lines of evidence for ECS assuming that ECS follows a `gamma` distribution. 
+
+This method will reproduce likely distribution following a gamma distbution that will have a similar peak and spread as the distributions presented in Sherwood et al. 2020. 
+
+The optimal `shape` and `rate` parameters for each `gamma` distribution of ECS for different lines of evidence will be used in `rlgamma()` to produce samples that can be propagated through Matilda/Hector. 
+
+# Libraries
+
+```{r}
+# load libraries
+library(MASS)
+library(ggplot2)
+library(matilda)
+library(parallel)
+```
+
+# Data
+
+Adding data for potential ECS values from Sherwood PDFs using the values of percentiles (5th, 10th, 17th, 20th, 25th, 50th, 75th, 80th, 83rd, 90th, and 95th) mode and mean.
+
+Storing data as a list of vectors with names of the vectors in the list coded to represent the line of evidence associated with that data.
+
+```{r}
+data_list <- list(
+  UL = c(
+    2.1950,
+    2.3849,
+    2.5750,
+    2.6450,
+    2.7450,
+    3.2150,
+    3.7850,
+    3.9450,
+    4.055,
+    4.4149,
+    4.8650,
+    3.0249,
+    3.33741
+  ),
+  no_process = c(
+    2.0850,
+    2.2850,
+    2.4750,
+    2.5450,
+    2.6550,
+    3.1649,
+    3.8150,
+    4.0050,
+    4.1450,
+    4.5750,
+    5.1450,
+    2.9149,
+    3.341
+  ),
+  no_historical = c(
+    2.0450,
+    2.2250,
+    2.4050,
+    2.4750,
+    2.5750,
+    3.0450,
+    3.6250,
+    3.7850,
+    3.9050,
+    4.2749,
+    4.7550,
+    2.8150,
+    3.1799
+  ),
+  no_paleo = c(
+    2.0549,
+    2.3150,
+    2.5750,
+    2.6649,
+    2.8150,
+    3.5249,
+    4.5150,
+    4.8250,
+    5.0650,
+    5.8650,
+    7.0750,
+    3.0050,
+    3.9729
+  ),
+  EC_UL = c(
+    2.2749,
+    2.4750,
+    2.6649,
+    2.7350,
+    2.8350,
+    3.3150,
+    3.8849,
+    4.0450,
+    4.1550,
+    4.5150,
+    4.9550,
+    3.0650,
+    3.4313
+  )
+)
+```
+
+# Fit Distirbution to the data 
+
+Use the `fitdistr()` function in the `MASS` package to fit a maximum likelihood `gamma` distribution to each element in the data list. It is possible to manipulated in several ways. I will avoid that for now to minimize bias.
+
+```{r, results='hide'}
+
+hyper_param_list <- lapply(data_list, fitdistr, densfun = "gamma")
+
+```
+
+The parameter list includes estimated `shape` and `rate` parameters for each evidence PDF. Each element of the list alsp produces a log-likelihood value.
+
+# Sample Distributions
+
+Use the parameters for each line of evidence to simulate n samples from a gamma distribution.
+
+```{r, results='hide'}
+set.seed(123)
+
+n = 10
+
+sample_list <- lapply(hyper_param_list, function(evidence) {
+  data.frame(ECS = rgamma(n,
+                          shape = evidence$estimate["shape"],
+                          rate = evidence$estimate["rate"]))
+})
+  
+```
+
+# Visualize Simulated Samples
+
+Use ggplot2 to visualize samples simulated from the gamma distribution for each line of evidence.
+
+```{r, results='hide'}
+# create dataframe
+ecs_samples_df <- data.frame(
+  value = unlist(sample_list),
+  evidence = rep(names(sample_list), each = n),
+  row.names = NULL
+)
+
+```
+
+```{r}
+# plot
+ggplot() +
+  geom_density(data = ecs_samples_df,
+               aes(x = value, 
+                   color = evidence)) +
+  theme_light() +
+  scale_x_continuous(breaks = seq(from = 0, to = 10, by = 1)) +
+  facet_wrap(~evidence)
+  
+```
+
+# Using ECS samples to run Matilda
+
+Samples from the distributions above can be used as the ECS inputs for Hector/Matilda.
+
+Read in scenario inputs:
+```{r}
+ini_list <- list(
+ssp126 = system.file("input/hector_ssp126.ini", package = "hector"), 
+ssp245 = system.file("input/hector_ssp245.ini", package = "hector"), 
+ssp370 = system.file("input/hector_ssp370.ini", package = "hector"),
+ssp585 = system.file("input/hector_ssp585.ini", package = "hector") 
+)
+```
+
+Initiate cores:
+```{r}
+core_list <- lapply(ini_list, newcore)
+```
+
+Generate parameter values using Matilda's priors. 
+
+To isolate the effect of ECS values - use one core to produce all parameter values:
+```{r}
+set.seed(123)
+init_params <- generate_params(core = core_list[[1]], draws = n)
+```
+
+For each parameter set in the list, remove the ECS column and add parameters to ECS samples from gamma sampling effort:
+```{r}
+params_list <- lapply(sample_list, function(data){
+  
+  params_no_ecs <- init_params[, -6]
+  
+  cbind(data, params_no_ecs)
+  
+})
+
+```
+
+Use parallel computing to run Hector for each of the parameter set in `params_list` over :
+
+```{r}
+cl <- makeCluster(7)
+
+clusterExport(cl, c("iterate_model", "params_list", "ini_list", "newcore"))
+
+start <- proc.time()
+result <- parLapply(cl, ini_list, function(file) {
+  
+  core = newcore(file)
+  
+  lapply(params_list, function(params) {
+    iterate_model(core = core, 
+                  params = params, 
+                  save_years = 1800:2100)
+  })
+})
+stopCluster(cl)
+proc.time() - start
+```
+
+
+```{r}
+y <- data.frame(
+  value = rtrunc(100000, spec = "gamma", a = 1.0, b = 8.0, shape = 17.56, rate = 5.29))
+```
+
+```{r}
+ggplot() +
+  geom_density(data = y,
+               aes(x = value)) +
+  theme_light()
+```
+

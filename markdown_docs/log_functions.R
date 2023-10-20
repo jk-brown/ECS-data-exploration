@@ -21,3 +21,10 @@ generate_lognormal_samples <- function(mu, sigma, n_samples) {
   
   return(samples)
 }
+
+
+# Compute meanlog and sdlog
+mean_UL <- mean(UL)
+sd_UL <- sd(UL)
+meanlog <- log(mean_UL^2 / sqrt(sd_UL^2 + mean_UL^2))
+sdlog <- sqrt(log(1 + (sd_UL^2 / mean_UL^2)))
