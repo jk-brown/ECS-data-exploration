@@ -123,7 +123,7 @@ hyper_param_list <- lapply(data_list, fitdistr, densfun = "gamma")
 
 ```
 
-The parameter list includes estimated `shape` and `rate` parameters for each evidence PDF. Each element of the list alsp produces a log-likelihood value.
+The parameter list includes estimated `shape` and `rate` parameters for each evidence PDF. Each element of the list also produces a log-likelihood value.
 
 # Sample Distributions
 
@@ -132,7 +132,7 @@ Use the parameters for each line of evidence to simulate n samples from a gamma 
 ```{r, results='hide'}
 set.seed(123)
 
-n = 10
+n = 10000
 
 sample_list <- lapply(hyper_param_list, function(evidence) {
   data.frame(ECS = rgamma(n,
@@ -205,6 +205,8 @@ params_list <- lapply(sample_list, function(data){
   
 })
 
+# just one evidence scenario
+test_one_param_df <- list(params_list$UL)
 ```
 
 Use parallel computing to run Hector for each of the parameter set in `params_list` over :
@@ -212,14 +214,14 @@ Use parallel computing to run Hector for each of the parameter set in `params_li
 ```{r}
 cl <- makeCluster(7)
 
-clusterExport(cl, c("iterate_model", "params_list", "ini_list", "newcore"))
+clusterExport(cl, c("iterate_model", "params_list", "ini_list", "newcore", "test_list"))
 
 start <- proc.time()
 result <- parLapply(cl, ini_list, function(file) {
   
   core = newcore(file)
   
-  lapply(params_list, function(params) {
+  lapply(test_list, function(params) {
     iterate_model(core = core, 
                   params = params, 
                   save_years = 1800:2100)
@@ -228,7 +230,6 @@ result <- parLapply(cl, ini_list, function(file) {
 stopCluster(cl)
 proc.time() - start
 ```
-
 
 ```{r}
 y <- data.frame(
