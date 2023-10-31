@@ -23,6 +23,7 @@ The optimal `shape` and `rate` parameters for each `gamma` distribution of ECS f
 # load libraries
 library(MASS)
 library(ggplot2)
+remotes::install_github("jgcri/matilda@dev", force = T)
 library(matilda)
 library(parallel)
 ```
@@ -130,7 +131,7 @@ The parameter list includes estimated `shape` and `rate` parameters for each evi
 Use the parameters for each line of evidence to simulate n samples from a gamma distribution.
 
 ```{r, results='hide'}
-set.seed(123)
+set.seed(2)
 
 n = 10000
 
@@ -199,7 +200,9 @@ For each parameter set in the list, remove the ECS column and add parameters to 
 ```{r}
 params_list <- lapply(sample_list, function(data){
   
-  params_no_ecs <- init_params[, -6]
+  params_no_ecs <- init_params
+  
+  params_no_ecs$ECS <- NULL
   
   cbind(data, params_no_ecs)
   
@@ -212,24 +215,184 @@ test_one_param_df <- list(params_list$UL)
 Use parallel computing to run Hector for each of the parameter set in `params_list` over :
 
 ```{r}
-cl <- makeCluster(7)
+cl <- makeCluster(detectCores() - 1)
 
-clusterExport(cl, c("iterate_model", "params_list", "ini_list", "newcore", "test_list"))
+clusterExport(cl, c("iterate_model", "params_list", "ini_list", "newcore"))
 
 start <- proc.time()
-result <- parLapply(cl, ini_list, function(file) {
+result <- parLapply(cl, params_list, function(params) {
+  core = newcore(ini_list$ssp245)
   
-  core = newcore(file)
-  
-  lapply(test_list, function(params) {
-    iterate_model(core = core, 
-                  params = params, 
-                  save_years = 1800:2100)
-  })
+  iterate_model(
+    core = core,
+    params = params,
+    save_years = 1800:2100,
+    save_vars = c("CO2_concentration", "gmst")
+  )
 })
+
 stopCluster(cl)
 proc.time() - start
 ```
+
+Running the above code chunk on 8 core cluster applies 10,000 parameter sets for each line of evidence in params_list across the SSP2-4.5 emissions scenario. The code results in a list of result dfs, one for each line of evidence. Each df will have a total of 6,020,000 rows (1 scenario x 2 variables x 301 years x 10000 runs).
+
+NAs may be present. These need to be removed before proceeding with analysis.
+
+```{r}
+result_na_rm <- lapply(result, function(df) {
+  
+  if (anyNA(df) == TRUE) {
+    df <- na.omit(df)
+  }
+  
+})
+```
+
+Loop through the list of result dfs and add a column identifying its line of evidence. Do this by creating a new df based on the name of the df in the result_na_rm list, then add an evidence column to each new df that is the name of the df in result_na_rm, and last replace the old df with the new one in the result_na_rm list
+
+```{r}
+for(name in names(result_na_rm)) {
+  df <- result_na_rm[[name]]
+  df$evidence <- name
+  result_na_rm[[name]] <- df
+}
+```
+
+# Weighting ensemble members against observed data
+
+Weight models based on observed temperature using score_ramp (w1 = 0.0, w2 = sd(observed gmst))
+
+```{r}
+ramp_scored <- lapply(
+  result_na_rm,
+  score_runs,
+  criterion = criterion_gmst_obs(),
+  score_function = score_ramp,
+  w1 = 0.0,
+  w2 = sd(matilda:::adjusted_gmst_data$anomaly_C)
+)
+```
+
+Just to have it, weight models using the score_bayesian function.
+
+```{r}
+bayesian_scored <- lapply(result_na_rm,
+                          score_runs,
+                          criterion = criterion_gmst_obs(),
+                          score_function = score_bayesian)
+```
+
+# Calculate output metrics 
+
+Define metric of interest. What is the long-term average (2090-2100) of gmst anomaly?
+
+```{r}
+long_term_metric <- new_metric(var = GMST(), years = 2090:2100, mean)
+```
+
+Apply metric to each df in `result_na_rm`:
+
+```{r}
+metric_results <- lapply(result_na_rm, metric_calc, long_term_metric)
+```
+
+# Calculate warming probabilities
+
+Compute the probability of warming range for each evidence df. Need access to the metric values and weights.
+
+Add scores to the `metric_results` list to make the probability calculation code easier. 
+
+```{r}
+metric_results_scored <- Map(merge, metric_results, ramp_scored, by = "run_number")
+```
+
+now calculate the probabilities using the `metric_results_scored` object
+
+```{r}
+bins <- c(1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, Inf)
+
+prob_results <- lapply(metric_results_scored, function(df){
+  
+  prob_calc(df$metric_result, 
+            bins = bins,
+            scores = df$weights)
+})
+```
+
+Add column of evidence labels
+
+```{r}
+for(name in names(prob_results)) {
+  df <- prob_results[[name]]
+  df$evidence <- name
+  prob_results[[name]] <- df
+}
+```
+
+create probability data frame for plotting - remove row names
+
+```{r}
+prob_df <- do.call(rbind, prob_results)
+row.names(prob_df) <- NULL
+```
+
+# Some Viz
+
+Probability plot:
+
+```{r}
+prob_plot <- 
+  ggplot(data = prob_df, 
+           aes(
+             fill = bins, 
+             x = evidence, 
+             y = probability)) +
+  geom_bar(position = position_fill(reverse = T),
+           stat = "identity",
+           width = 0.6)+
+  scale_y_continuous(breaks = seq(0.0, 1.0, 0.1)) +
+  scale_fill_manual(
+     values = c(
+      "#2166AC",
+      "#4393C3",
+      "#D1E5F0",
+      "#FDDBC7",
+      "#F4A582",
+      "#D6604D",
+      "#B2182B",
+      "#67001F"),
+     labels =  c(
+      "1.0 to 1.5 C",
+      "1.5 to 2.0 C",
+      "2.0 to 2.5 C", # used this bin specifically for LTE seminar example
+      "2.5 to 3.0 C",
+      "3.0 to 3.5 C",
+      "3.5 to 4 C",
+      "4 to 4.5 C",
+      ">4.5 C")) +
+  coord_flip() +
+  theme_light()
+prob_plot
+  
+```
+
+
+
+
+
+# Other notes etc.
+
+#### *This has already been run - do not run again unless you need to save a new file.* 
+Bind the rows of the dfs together to make a final large df with all results and save.
+
+```{r}
+result_df <- do.call(rbind, result_na_rm)
+write.csv(result_df, file = "data/result_df_10k_na_rm.csv")
+```
+
+
+
 
 ```{r}
 y <- data.frame(
