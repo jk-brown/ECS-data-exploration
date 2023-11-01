@@ -237,25 +237,13 @@ proc.time() - start
 
 Running the above code chunk on 8 core cluster applies 10,000 parameter sets for each line of evidence in params_list across the SSP2-4.5 emissions scenario. The code results in a list of result dfs, one for each line of evidence. Each df will have a total of 6,020,000 rows (1 scenario x 2 variables x 301 years x 10000 runs).
 
-NAs may be present. These need to be removed before proceeding with analysis.
-
-```{r}
-result_na_rm <- lapply(result, function(df) {
-  
-  if (anyNA(df) == TRUE) {
-    df <- na.omit(df)
-  }
-  
-})
-```
-
 Loop through the list of result dfs and add a column identifying its line of evidence. Do this by creating a new df based on the name of the df in the result_na_rm list, then add an evidence column to each new df that is the name of the df in result_na_rm, and last replace the old df with the new one in the result_na_rm list
 
 ```{r}
-for(name in names(result_na_rm)) {
-  df <- result_na_rm[[name]]
+for(name in names(result)) {
+  df <- result[[name]]
   df$evidence <- name
-  result_na_rm[[name]] <- df
+  result[[name]] <- df
 }
 ```
 
@@ -265,7 +253,7 @@ Weight models based on observed temperature using score_ramp (w1 = 0.0, w2 = sd(
 
 ```{r}
 ramp_scored <- lapply(
-  result_na_rm,
+  result,
   score_runs,
   criterion = criterion_gmst_obs(),
   score_function = score_ramp,
@@ -277,10 +265,29 @@ ramp_scored <- lapply(
 Just to have it, weight models using the score_bayesian function.
 
 ```{r}
-bayesian_scored <- lapply(result_na_rm,
+bayesian_scored <- lapply(result,
                           score_runs,
                           criterion = criterion_gmst_obs(),
                           score_function = score_bayesian)
+```
+
+Merge the weights with results:
+
+```{r}
+result_scored <- Map(merge, result, ramp_scored, by = "run_number")
+```
+
+and create a df (for plotting):
+```{r}
+result_scored_df <- do.call(rbind, result_scored)
+row.names(result_scored_df) <- NULL
+```
+
+NAs may be present. These need to be removed before proceeding with analysis.
+
+```{r}
+anyNA(result_scored_df)
+result_scored_df <- na.omit(result_scored_df)
 ```
 
 # Calculate output metrics 
@@ -376,9 +383,101 @@ prob_plot <-
 prob_plot
   
 ```
+Projection plot:
 
+to make this figure each of the result dfs need to be merged with scores.
+For correct relative anomaly values (e.g., to pre-industrial) values need normalized (skipping this for right now).
 
+```{r}
+projection_plot <- 
+  ggplot(data = subset(result_scored_df,
+                       year >= 1950 
+                       & year <= 2100
+                       & variable == GMST())) +
+  geom_line(
+    aes(
+      x = year, 
+      y = value,
+      group = run_number,
+      color = weights,
+      alpha = weights),
+    linewidth = 0.3) +
+  scale_color_gradient(low = "lightblue", high = "dodgerblue4", name = "Weights") +
+  scale_alpha_continuous(range(c(0, 1))) +
+  labs(x = "year", y = "temp") +
+  theme_light() +
+  guides(alpha = "none") +
+  facet_wrap(~evidence)
+projection_plot                           
+```
 
+```{r, message=FALSE}
+# calculating median warming
+library(tidyverse)
+library(spatstat)
+
+temp_data <- subset(result_scored_df, 
+                    variable == GMST() &
+                      year > 2015 &
+                      year < 2101)
+
+# median warming calculation
+median_warming <- temp_data %>% 
+  group_by(year, evidence) %>% 
+  reframe(median_warming_wt = weighted.quantile(value, weights, probs = 0.5),
+          CI_5 = weighted.quantile(value, weights, probs = 0.05),
+          CI_95 = weighted.quantile(value, weights, probs = 0.95),
+          CI_16 = weighted.quantile(value, weights, probs = 0.16),
+          CI_84 = weighted.quantile(value, weights, probs = 0.84))
+
+median_warming
+```
+
+```{r}
+temp_plot <- 
+  ggplot(data = median_warming) +
+  geom_line(aes(x = year, 
+                y = median_warming_wt,
+                color = evidence)) +
+  geom_ribbon(aes(x = year, 
+                  ymin = CI_5,
+                  ymax = CI_95,
+                  fill = evidence),
+              alpha = 0.1) +
+  theme_light() +
+  facet_wrap(~evidence)
+temp_plot
+  
+```
+```{r}
+# median warming calculation
+warming_point <- temp_data %>% 
+  group_by(evidence) %>% 
+  reframe(median_warming_wt = weighted.quantile(value, weights, probs = 0.5),
+          CI_5 = weighted.quantile(value, weights, probs = 0.05),
+          CI_95 = weighted.quantile(value, weights, probs = 0.95),
+          CI_16 = weighted.quantile(value, weights, probs = 0.16),
+          CI_84 = weighted.quantile(value, weights, probs = 0.84))
+
+warming_point
+```
+```{r}
+point_plot <- 
+  ggplot(data = warming_point) +
+  geom_point(aes(x = evidence,
+                 y = median_warming_wt,
+                 color = evidence),
+             size = 5,
+             shape = 1) +
+  geom_errorbar(aes(x = evidence,
+                    ymin = CI_5,
+                    ymax = CI_95,
+                    color = evidence),
+                width = 0.1,
+                linewidth = 0.7) +
+  theme_light()
+point_plot
+```
 
 
 # Other notes etc.
