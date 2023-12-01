@@ -9,20 +9,44 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Goal
+# Summary if this analysis
 
-Use `fitdistr()` to maximize the likelihood of distirbution parameters to fit a provided set of data. I am using this as a quick and easy way to propose distributions for Sherwood et al. 2020 lines of evidence for ECS assuming that ECS follows a `gamma` distribution. 
+This document works through the analysis conducted to investigate the affect of using variable ECS evidence combinations to compute future temperature projections using a probabilistic simple climate model framework (Hector with Matilda).
 
-This method will reproduce likely distribution following a gamma distbution that will have a similar peak and spread as the distributions presented in Sherwood et al. 2020. 
+Sherwood et al. 2020 (S20) used a sophisticated Bayesian approach to quantify a likelihood distribution using combined lines of ECS evidence (they called this their *Baseline*). This distribution has since been used by IPCC to update the likely ECS range. In S20, authors also systematically remove individual lines of evidence, use different priors, and add lines of evidence to investigate the impact these different configurations impact the ECS distributions.  
+Here the goal was to take advantage of these ECS likelihood distributions, which have slight differences in peak and spread, and use them to project future climate using Hector with Matilda (simple climate model with a probabilistic projection framework). This will provide some perspective on the affect different ECS distributions have on global temperature projections and the probability of surpassing warming thresholds. To do this, data from confidence levels were harvested from S20 supplemental data and used to reproduce likelihood distributions for five evidence combinations highlighted in S20, these included:
 
-The optimal `shape` and `rate` parameters for each `gamma` distribution of ECS for different lines of evidence will be used in `rlgamma()` to produce samples that can be propagated through Matilda/Hector. 
+1. *Baseline* - full combination of all lines of evidence. 
+
+2. *No process* - excluding process and feedback evidence (from ESMs) from the full baseline combination.
+
+3. *No historical* - excluding historical evidence from the full baseline combination. 
+
+4. *No paleoclimate* - excluding paleoclimate evidence from the full baseline combination.
+
+5. *Baseline + Emergent constraints* - using the baseline combination with the inclusion of evidence from emergent constraints. 
+
+A parametric likelihood distribution was produced by optimizing the shape and rate parameters of a gamma distribution using the S20 data for each of the evidence configurations. The purpose of this method was to reproduce distributions with similar peak and spread as the official likelihood distributions quantified in S20, that can also be sampled with little effort. Using this method, ECS values can be sampled n times (while taking into account estimated uncertainty) from distributions that mimic those developed in S20. This was completed for each evidence configuration.
+
+Sampled ECS values for each evidence configuration was used to establish a parameter set that was used to complete a single run of the Hector simple climate model. Using the Matilda probabilistic framework this process is iterated over several parameter sets, each with a slightly different ECS value to produce a perturbed parameter ensemble (PPE) result. As a result, the uncertainty associated with ECS from different evidence combinations is propagated through to an ensemble of modeled climate projections. 
+
+PPEs are weighted against historical data (specifically historical temperature and CO2 concentrations). This process down weights ensemble members that significantly diverge from observed values while assigning higher weights to ensemble members that perform well during the historical period. This step is performed under the assumption that ensembles members that perform well in the historical period have a higher potential to more accurately projected future climate variables.
+
+Using assigned weights, end-of-century metrics and probabilities of warming were calculated from the ensemble (i.e., median global mean surface (gmst) for 2100). Probabilities of warming are a weighted sum of median temperature anomaly values that fall within a specific warming range.
+
+This document offers code for completing the above analysis and also for creating figures presented at for on poster #GC33F-1213 at AGU 2023.
+
+*Note:* Running this analysis may take more that 7 hours given the mass of model runs used to stabilize resulting temperature distributions for each of the evidence configurations (n = 10,000 x 5 evidence scenarios = 50,000 total model runs). This may also take up considerable memory. Efforts were taken to provide efficient and easy to understand code. However, some memory inefficiencies do currently exist.
 
 # Libraries
 
-```{r}
+```{r, message=FALSE, results='hide'}
 # load libraries
 library(MASS)
 library(ggplot2)
+library(see)
+# force load the dev branch of Matilda to pick-up error corrections
+# if on windows and R won't install first run this in console --> options(download.file.method = "wininet") 
 remotes::install_github("jgcri/matilda@dev", force = T)
 library(matilda)
 library(parallel)
@@ -30,13 +54,13 @@ library(parallel)
 
 # Data
 
-Adding data for potential ECS values from Sherwood PDFs using the values of percentiles (5th, 10th, 17th, 20th, 25th, 50th, 75th, 80th, 83rd, 90th, and 95th) mode and mean.
+Here ECS data sets are built for each evidence configuration using ECS values from S20. This data was harvested from supplemental information in S20 and represents ECS percentile estimates from likelihood distributions quantified in S20 for each of the five evidence configurations I am using in this analysis. The percentile estimates reported in this data represent the 5th, 10th, 17th, 20th, 25th, 50th, 75th, 80th, 83rd, 90th, and 95th percentiles as well as the mode and mean.
 
-Storing data as a list of vectors with names of the vectors in the list coded to represent the line of evidence associated with that data.
+Store data as a list of vectors, this makes programming the rest of the analysis easier. Names of each list are coded to represent the evidence configuration the data is associated with.
 
 ```{r}
 data_list <- list(
-  UL = c(
+  "Baseline" = c(
     2.1950,
     2.3849,
     2.5750,
@@ -51,7 +75,7 @@ data_list <- list(
     3.0249,
     3.33741
   ),
-  no_process = c(
+  "No Process" = c(
     2.0850,
     2.2850,
     2.4750,
@@ -66,7 +90,7 @@ data_list <- list(
     2.9149,
     3.341
   ),
-  no_historical = c(
+  "No Historical" = c(
     2.0450,
     2.2250,
     2.4050,
@@ -81,7 +105,7 @@ data_list <- list(
     2.8150,
     3.1799
   ),
-  no_paleo = c(
+  "No Paleoclimate" = c(
     2.0549,
     2.3150,
     2.5750,
@@ -96,7 +120,7 @@ data_list <- list(
     3.0050,
     3.9729
   ),
-  EC_UL = c(
+  "Baseline + Emergent constraints" = c(
     2.2749,
     2.4750,
     2.6649,
@@ -116,7 +140,13 @@ data_list <- list(
 
 # Fit Distirbution to the data 
 
-Use the `fitdistr()` function in the `MASS` package to fit a maximum likelihood `gamma` distribution to each element in the data list. It is possible to manipulated in several ways. I will avoid that for now to minimize bias.
+Use `fitdistr()` to maximize the likelihood of distribution parameters to fit a provided set of data. I am using this as a quick and easy way to propose distributions for Sherwood et al. 2020 lines of evidence for ECS assuming that ECS follows a `gamma` distribution. 
+
+This method will reproduce likely distribution following a gamma distbution that will have a similar peak and spread as the distributions presented in Sherwood et al. 2020. 
+
+The optimal `shape` and `rate` parameters for each `gamma` distribution of ECS for different lines of evidence will be used in `rlgamma()` to produce samples that can be propagated through Matilda/Hector. 
+
+`fitdistr()` function in the `MASS` package to fit a maximum likelihood `gamma` distribution to each element in the data list. It is possible to manipulated in several ways. I will avoid that for now to minimize bias.
 
 ```{r, results='hide'}
 
@@ -166,7 +196,12 @@ ggplot() +
   theme_light() +
   scale_x_continuous(breaks = seq(from = 0, to = 10, by = 1)) +
   facet_wrap(~evidence)
-  
+  ggsave("figures/ECS_dist.png",
+       device = "png",
+       width = 10,
+       height = 8,
+       units = "in",
+       dpi = 300)
 ```
 
 # Using ECS samples to run Matilda
@@ -249,45 +284,265 @@ for(name in names(result)) {
 
 # Weighting ensemble members against observed data
 
+## ensembles weighted with temperature and co2 data
+
+### ensembles weighted with temperature data
+
 Weight models based on observed temperature using score_ramp (w1 = 0.0, w2 = sd(observed gmst))
 
 ```{r}
-ramp_scored <- lapply(
-  result,
-  score_runs,
-  criterion = criterion_gmst_obs(),
-  score_function = score_ramp,
-  w1 = 0.0,
-  w2 = sd(matilda:::adjusted_gmst_data$anomaly_C)
+scored_result <- lapply(result, function(df) {
+  
+  scores_gmst = score_runs(df,
+                           criterion = criterion_gmst_obs(),
+                           score_function = score_ramp, # can change scoring function here
+                           w1 = 0.0, # adjust lower divergence bound
+                           w2 = sd(matilda:::adjusted_gmst_data$anomaly_C)
+                           ) # adjust upper divergence bound
+  scores_gmst <- na.omit(scores_gmst)
+  
+  scores_co2 = score_runs(df,
+                          criterion = criterion_co2_obs(),
+                          score_function = score_ramp, # can change scoring function here
+                          w1 = 0.0, # adjust lower divergence bound
+                          w2 = sd(matilda:::observed_data_co2$co2_ppm)
+                          ) # adjust upper divergence bound
+  scores_co2 <- na.omit(scores_co2)
+  
+  score_list = list(scores_co2, scores_gmst)
+  
+  scores_mc = multi_criteria_weighting(score_list)
+  
+  scored_result = merge(df, scores_gmst, by = "run_number")
+  scored_result = merge(scored_result, scores_co2, by = "run_number")
+  scored_result = merge(scored_result, scores_mc, by = "run_number")
+    
+})
+
+result_scored <- do.call(rbind, scored_result)
+row.names(result_scored) <- NULL
+```
+
+normalizing function:
+
+```{r}
+# Write function to normalize Matilda data to reference period
+normalize_temperature <- function(data, reference_start_year, reference_end_year) {
+  # Filter data for the reference period
+  reference_period <- subset(
+    data,
+    year >= reference_start_year &
+      year <= reference_end_year
+  )
+
+  # Calculate the mean values of reference period
+  mean_reference_period <- mean(reference_period$value)
+
+  # Calculate normalized values for each year in the data set
+  ## subtract data values by reference period mean
+  normalized_values <- data$value - mean_reference_period
+
+  # Create a new data frame with the normalized data
+  normalized_data <- data.frame(
+    year = data$year,
+    adjusted_value = normalized_values
+  )
+
+  return(normalized_data)
+}
+```
+
+Now subset data to variable we want to plot. Trying to normalize with both CO2 and gmst in the df will cause the adjusted values to be miscalculated.
+```{r, message=FALSE}
+# calculating median warming
+library(tidyverse)
+library(spatstat)
+
+temp_data <- subset(result_scored, 
+                    variable == GMST() &
+                      year > 1849 &
+                      year < 2101)
+```
+
+normalizing temperature projections in temp_data df:
+
+```{r}
+# Normalize Matilda result to 1850-1900 reference period
+pre_temp_data <- normalize_temperature(temp_data,
+  reference_start_year = 1850,
+  reference_end_year = 1900
 )
+
+# Add column of adjusted values
+temp_data$value_adjusted <- pre_temp_data$adjusted_value
+
+# remove the pre_result df to save memory
+rm(pre_temp_data)
 ```
 
-Just to have it, weight models using the score_bayesian function.
-
+Plotting:
 ```{r}
-bayesian_scored <- lapply(result,
-                          score_runs,
-                          criterion = criterion_gmst_obs(),
-                          score_function = score_bayesian)
+gmst_scored_ensemble <- 
+  ggplot(data = subset(temp_data,
+                       year >= 1950 
+                       & year <= 2100
+                       & variable == GMST()
+                       & evidence == "UL")) +
+  geom_line(
+    aes(
+      x = year, 
+      y = value,
+      group = run_number,
+      color = weights.x,
+      alpha = weights.x),
+    linewidth = 0.1) +
+  scale_color_gradient(low = "lightblue", high = "dodgerblue4", name = "Weights") +
+  scale_alpha_continuous(range(c(0, 1))) +
+  labs(x = "Years", y = "Temperature Anomaly (C)") +
+  ggtitle(label = "Hector PPE weighted by historical temperature") +
+  theme_light() +
+  guides(alpha = "none")
+
+# Creates observed data frame - this  can be added as a layer to the plot
+# But currently only includes data from 1950-2023
+obs_dat <- data.frame(
+  year = criterion_gmst_obs()$year,
+  value_obs = criterion_gmst_obs()$obs_values
+)
+
+# Add observed CO2 values to aid visualization of most plausible models
+gmst_scored_ensemble_obs <- gmst_scored_ensemble + 
+  geom_line(
+  data = obs_dat, aes(x = year, y = value_obs),
+  color = "red",
+  linewidth = 1
+)
+gmst_scored_ensemble_obs
+
+ggsave("figures/gmst_scored_ensemble.png",
+       plot = gmst_scored_ensemble_obs,
+       device = "png",
+       width = 28,
+       height = 15, 
+       units = "cm",
+       dpi = "print")
+```
+### ensembles weighted with CO2 data
+
+Now subset data to variable we want to plot. Trying to normalize with both CO2 and gmst in the df will cause the adjusted values to be miscalculated.
+```{r, message=FALSE}
+# calculating median warming
+library(tidyverse)
+library(spatstat)
+
+co2_data <- subset(result_scored, 
+                    variable == CONCENTRATIONS_CO2() &
+                    year > 1849 &
+                    year < 2101)
 ```
 
-Merge the weights with results:
+normalizing temperature projections in temp_data df:
 
 ```{r}
-result_scored <- Map(merge, result, ramp_scored, by = "run_number")
+# Normalize Matilda result to 1850-1900 reference period
+pre_co2_data <- normalize_temperature(co2_data,
+  reference_start_year = 1850,
+  reference_end_year = 1900
+)
+
+# Add column of adjusted values
+co2_data$value_adjusted <- pre_co2_data$adjusted_value
+
+# remove the pre_result df to save memory
+rm(pre_co2_data)
 ```
 
-and create a df (for plotting):
+Plotting:
 ```{r}
-result_scored_df <- do.call(rbind, result_scored)
-row.names(result_scored_df) <- NULL
+co2_scored_ensemble <- 
+  ggplot(data = subset(co2_data,
+                       year >= 1950 
+                       & year <= 2100
+                       & variable == CONCENTRATIONS_CO2()
+                       & evidence == "UL")) +
+  geom_line(
+    aes(
+      x = year, 
+      y = value,
+      group = run_number,
+      color = weights.y,
+      alpha = weights.y),
+    linewidth = 0.1) +
+  scale_color_gradient(low = "lightblue", high = "dodgerblue4", name = "Weights") +
+  scale_alpha_continuous(range(c(0, 1))) +
+  labs(x = "Years", y = "Atmospheric CO2 Concentration (ppm)") +
+  ggtitle(label = "Hector PPE weighted by historical CO2 concentration") +
+  theme_light() +
+  guides(alpha = "none")
+
+# Creates observed data frame - this  can be added as a layer to the plot
+# But currently only includes data from 1950-2023
+obs_dat <- data.frame(
+  year = criterion_co2_obs()$year,
+  value_obs = criterion_co2_obs()$obs_values
+)
+
+# Add observed CO2 values to aid visualization of most plausible models
+co2_scored_ensemble_obs <- co2_scored_ensemble + 
+  geom_line(
+  data = obs_dat, aes(x = year, y = value_obs),
+  color = "red",
+  linewidth = 1
+)
+co2_scored_ensemble_obs
+
+ggsave("figures/co2_scored_ensemble.png",
+       plot = co2_scored_ensemble_obs,
+       device = "png",
+       width = 28,
+       height = 15, 
+       units = "cm",
+       dpi = "print")
 ```
 
-NAs may be present. These need to be removed before proceeding with analysis.
+## multiple criterion weighting
 
 ```{r}
-anyNA(result_scored_df)
-result_scored_df <- na.omit(result_scored_df)
+scored_mc <- lapply(result, function(df) {
+  
+  scores_co2_na = score_runs(df, 
+                          criterion = criterion_co2_obs(),
+                          score_function = score_ramp, # can change scoring function here
+                          w1 = 0.0, # adjust lower divergence bound
+                          w2 = sd(matilda:::observed_data_co2$co2_ppm)
+                          ) # adjust upper divergence bound
+  scores_co2 <- na.omit(scores_co2_na)
+  
+  scores_gmst_na = score_runs(df,
+                           criterion = criterion_gmst_obs(),
+                           score_function = score_ramp, # can change scoring function here
+                           w1 = 0.0, # adjust lower divergence bound
+                           w2 = sd(matilda:::adjusted_gmst_data$anomaly_C)
+                           ) # adjust upper divergence bound
+  scores_gmst <- na.omit(scores_gmst_na)
+  
+  score_list = list(scores_co2, scores_gmst)
+  
+  scores = multi_criteria_weighting(score_list)
+    
+})
+
+# result scored mc is a list -- use lapply to merge and then clean
+result_mc_scored_df <- lapply(scored_mc, function(df){
+  
+  result_scored_mc = merge(df, result_scored, by = "run_number")
+
+  })
+
+result_scored_mc_df <- do.call(rbind, result_scored_mc)
+
+row.names(result_scored_mc_df) <- NULL
+anyNA(result_scored_mc_df)
 ```
 
 # Calculate output metrics 
@@ -295,13 +550,19 @@ result_scored_df <- na.omit(result_scored_df)
 Define metric of interest. What is the long-term average (2090-2100) of gmst anomaly?
 
 ```{r}
-long_term_metric <- new_metric(var = GMST(), years = 2090:2100, mean)
+long_term_metric <- new_metric(var = GMST(), years = 2100, median)
 ```
 
-Apply metric to each df in `result_na_rm`:
+Calculate metric for each df in `result` after removing NAs:
 
 ```{r}
-metric_results <- lapply(result_na_rm, metric_calc, long_term_metric)
+metric_results <- lapply(result, function(df) {
+  
+  result_na_rm <- na.omit(df)
+  
+  metric_calc(result_na_rm, long_term_metric)
+  
+})
 ```
 
 # Calculate warming probabilities
@@ -311,8 +572,21 @@ Compute the probability of warming range for each evidence df. Need access to th
 Add scores to the `metric_results` list to make the probability calculation code easier. 
 
 ```{r}
-metric_results_scored <- Map(merge, metric_results, ramp_scored, by = "run_number")
+metric_results_scored <- Map(merge, metric_results, scored_mc, by = "run_number")
+
+
+for(name in names(metric_results_scored)) {
+  df <- metric_results_scored[[name]]
+  df$evidence <- name
+  metric_results_scored[[name]] <- df
+}
+
+# median warming calculation
+metric_df <- do.call(rbind, metric_results_scored)
+row.names(metric_df) <- NULL
+
 ```
+
 
 now calculate the probabilities using the `metric_results_scored` object
 
@@ -323,7 +597,7 @@ prob_results <- lapply(metric_results_scored, function(df){
   
   prob_calc(df$metric_result, 
             bins = bins,
-            scores = df$weights)
+            scores = df$mc_weight)
 })
 ```
 
@@ -342,6 +616,7 @@ create probability data frame for plotting - remove row names
 ```{r}
 prob_df <- do.call(rbind, prob_results)
 row.names(prob_df) <- NULL
+prob_df$evidence <- as.factor(prob_df$evidence)
 ```
 
 # Some Viz
@@ -349,6 +624,19 @@ row.names(prob_df) <- NULL
 Probability plot:
 
 ```{r}
+prob_df$evidence <- recode_factor(prob_df$evidence,
+                                  UL = "Baseline",
+                                  no_process = "No Process",
+                                  no_historical = "No Historical",
+                                  no_paleo = "No Paleoclimate",
+                                  EC_UL = "Baseline + Emergent constraints")
+
+evidence_order <- c("Baseline", 
+                    "No Process",
+                    "No Historical",
+                    "No Paleoclimate",
+                    "Baseline + Emergent constraints")
+
 prob_plot <- 
   ggplot(data = prob_df, 
            aes(
@@ -370,117 +658,320 @@ prob_plot <-
       "#B2182B",
       "#67001F"),
      labels =  c(
-      "1.0 to 1.5 C",
-      "1.5 to 2.0 C",
-      "2.0 to 2.5 C", # used this bin specifically for LTE seminar example
-      "2.5 to 3.0 C",
-      "3.0 to 3.5 C",
-      "3.5 to 4 C",
-      "4 to 4.5 C",
-      ">4.5 C")) +
-  coord_flip() +
-  theme_light()
+      expression(paste("1.0 to 1.5", ~degree, "C")),
+      expression(paste("1.5 to 2.0", ~degree, "C")),
+      expression(paste("2.0 to 2.5", ~degree, "C")), # used this bin specifically for LTE seminar example
+      expression(paste("2.5 to 3.0", ~degree, "C")),
+      expression(paste("3.0 to 3.5", ~degree, "C")),
+      expression(paste("3.5 to 4.0", ~degree, "C")),
+      expression(paste("4.0 to 4.5", ~degree, "C")),
+      expression(paste(" > 4.5", ~degree, "C"))),
+     name = "Warming") +
+  labs(y = "Probability",
+       x = NULL,
+       title = "C)") +
+  scale_x_discrete(limit = rev(evidence_order)) +
+  theme_light(base_size = 24) +
+  theme(legend.position ="bottom") +
+  coord_flip()
 prob_plot
+
+ggsave("figures/temp_probabilities.png",
+       plot = prob_plot,
+       device = "png",
+       width = 17.26,
+       height = 11.39, 
+       units = "in",
+       dpi = "print")
   
+
 ```
-Projection plot:
+*Projection plot:*
+*to make this figure each of the result dfs need to be merged with scores.*
+*For correct relative anomaly values (e.g., to pre-industrial) values need normalized. I need to think about this point more because it might not be accurate...*
+*Normalization needs to be completed on CO2 and temperature separately in order to get an accurate results -- at least true for the function I have.*
 
-to make this figure each of the result dfs need to be merged with scores.
-For correct relative anomaly values (e.g., to pre-industrial) values need normalized (skipping this for right now).
+Before computing median and confidence intervals, normalize the data to reference anomalies relative to pre-industrial temperature
 
-```{r}
-projection_plot <- 
-  ggplot(data = subset(result_scored_df,
-                       year >= 1950 
-                       & year <= 2100
-                       & variable == GMST())) +
-  geom_line(
-    aes(
-      x = year, 
-      y = value,
-      group = run_number,
-      color = weights,
-      alpha = weights),
-    linewidth = 0.3) +
-  scale_color_gradient(low = "lightblue", high = "dodgerblue4", name = "Weights") +
-  scale_alpha_continuous(range(c(0, 1))) +
-  labs(x = "year", y = "temp") +
-  theme_light() +
-  guides(alpha = "none") +
-  facet_wrap(~evidence)
-projection_plot                           
-```
+Normalizing function:
+Normalizing to plot pre-industrial reference:
 
+
+Now subset data to variable we want to plot. Trying to normalize with both CO2 and gmst in the df will cause the adjusted values to be miscalculated.
 ```{r, message=FALSE}
 # calculating median warming
 library(tidyverse)
 library(spatstat)
 
-temp_data <- subset(result_scored_df, 
+temp_data <- subset(result_scored, 
                     variable == GMST() &
-                      year > 2015 &
                       year < 2101)
+```
 
+normalizing temperature projections in temp_data df:
+
+```{r}
+# Normalize Matilda result to 1850-1900 reference period
+pre_temp_data <- normalize_temperature(temp_data,
+  reference_start_year = 1850,
+  reference_end_year = 1900
+)
+
+# Add column of adjusted values
+temp_data$value_adjusted <- pre_temp_data$adjusted_value
+
+# remove the pre_result df to save memory
+rm(pre_temp_data)
+```
+
+
+```{r}
 # median warming calculation
-median_warming <- temp_data %>% 
-  group_by(year, evidence) %>% 
-  reframe(median_warming_wt = weighted.quantile(value, weights, probs = 0.5),
-          CI_5 = weighted.quantile(value, weights, probs = 0.05),
-          CI_95 = weighted.quantile(value, weights, probs = 0.95),
-          CI_16 = weighted.quantile(value, weights, probs = 0.16),
-          CI_84 = weighted.quantile(value, weights, probs = 0.84))
+median_warming <- temp_data %>%
+  group_by(year, evidence) %>%
+  reframe(
+    median_warming_wt = weighted.quantile(value_adjusted, mc_weight, probs = 0.5),
+    CI_5 = weighted.quantile(value_adjusted, mc_weight, probs = 0.05),
+    CI_95 = weighted.quantile(value_adjusted, mc_weight, probs = 0.95),
+    CI_16 = weighted.quantile(value_adjusted, mc_weight, probs = 0.16),
+    CI_84 = weighted.quantile(value_adjusted, mc_weight, probs = 0.84))
+
+median_warming$evidence <- recode_factor(
+  median_warming$evidence,
+  UL = "Baseline",
+  no_process = "No Process",
+  no_historical = "No Historical",
+  no_paleo = "No Paleoclimate",
+  EC_UL = "Baseline + Emergent constraints")
 
 median_warming
 ```
 
 ```{r}
+CreateAllFacet <- function(df, col){
+  df$facet <- df[[col]]
+  temp <- df
+  temp$facet <- "All Evidence Configurations"
+  merged <-rbind(temp, df)
+
+  # ensure the facet value is a factor
+  merged[[col]] <- as.factor(merged[[col]])
+
+  return(merged)
+}
+
+plot_df <- CreateAllFacet(median_warming, "evidence")
+```
+
+
+```{r}
+# order of the facet factor
+facet_order <- c("All Evidence Configurations",
+                 "Baseline",
+                 "No Process",
+                 "No Historical",
+                 "No Paleoclimate",
+                 "Baseline + Emergent constraints")
+
+# Convert the facet variable to a factor with the desired order
+plot_df$facet <- factor(plot_df$facet, levels = facet_order)
+
 temp_plot <- 
-  ggplot(data = median_warming) +
+  ggplot(data = subset(plot_df,
+                       year > 1949,
+                       year < 2101)) +
   geom_line(aes(x = year, 
                 y = median_warming_wt,
-                color = evidence)) +
+                color = evidence),
+            linewidth = 0.75) +
+  scale_color_manual(values = c("#003466", "#00a9cf", "#550307", "#EBCC2A", "#F21A00")) +
   geom_ribbon(aes(x = year, 
                   ymin = CI_5,
                   ymax = CI_95,
-                  fill = evidence),
-              alpha = 0.1) +
-  theme_light() +
-  facet_wrap(~evidence)
+                  fill = evidence,
+                  color = evidence),
+              alpha = 0.1,
+              linetype = "dashed") +
+  scale_fill_manual(values = c("#003466", "#00a9cf", "#550307", "#EBCC2A", "#F21A00")) +
+  labs(x = "Year",
+       y = expression(paste("Temperature Anomaly (", degree, "C)")),
+       title = "A)") +
+  theme_light(base_size = 24) +
+  theme(legend.position = "none") +
+  facet_wrap(~ facet)
 temp_plot
+
+ggsave("figures/temp_projections.png",
+       plot = temp_plot,
+       device = "png",
+       width = 17.26,
+       height = 11.39, 
+       units = "in",
+       dpi = "print")
   
 ```
-```{r}
-# median warming calculation
-warming_point <- temp_data %>% 
-  group_by(evidence) %>% 
-  reframe(median_warming_wt = weighted.quantile(value, weights, probs = 0.5),
-          CI_5 = weighted.quantile(value, weights, probs = 0.05),
-          CI_95 = weighted.quantile(value, weights, probs = 0.95),
-          CI_16 = weighted.quantile(value, weights, probs = 0.16),
-          CI_84 = weighted.quantile(value, weights, probs = 0.84))
 
-warming_point
+```{r}
+
+sample_metric <- metric_df %>% 
+  group_by(evidence) %>% 
+  sample_n(size = 9993, replace = F)
+
+sample_metric$evidence <- recode(
+  sample_metric$evidence,
+  UL = "Baseline",
+  no_process = "No Process",
+  no_historical = "No Historical",
+  no_paleo = "No Paleoclimate",
+  EC_UL = "Baseline + Emergent constraints")
+
+median_metric <- metric_df %>% 
+  group_by(evidence) %>% 
+  reframe(median_warming_val = quantile(metric_result, probs = 0.5),
+          CI_5 = quantile(metric_result, probs = 0.05),
+          CI_95 = quantile(metric_result, probs = 0.95))
+
+median_metric$evidence <- recode_factor(
+  median_metric$evidence,
+  UL = "Baseline",
+  no_process = "No Process",
+  no_historical = "No Historical",
+  no_paleo = "No Paleoclimate",
+  EC_UL = "Baseline + Emergent constraints")
+
+median_metric
+
+# Calculate the maximum metric result for each group
+max_values <- sample_metric %>%
+  group_by(evidence) %>%
+  summarise(max_metric_result = max(metric_result))
+
+# Merge the calculated maximum values back into the median_metric data
+median_metric <- left_join(median_metric, max_values, by = "evidence")
+
+median_metric
 ```
+
 ```{r}
 point_plot <- 
-  ggplot(data = warming_point) +
-  geom_point(aes(x = evidence,
-                 y = median_warming_wt,
-                 color = evidence),
-             size = 5,
-             shape = 1) +
-  geom_errorbar(aes(x = evidence,
+  ggplot() +
+    geom_point(data = sample_metric,
+         aes(x = evidence,
+             y = metric_result,
+             fill = evidence,
+             color = evidence),
+         position = position_jitter(seed = 1, width = 0.2),
+         alpha = 0.03) +
+  see::geom_violinhalf(data = sample_metric,
+              aes(x = evidence,
+                  y = metric_result,
+                  fill = evidence),
+              alpha = 1,
+              trim = T) +
+  geom_point(data = median_metric,
+             aes(x = evidence,
+                 y = median_warming_val),
+             size = 3,
+             color = "gray50") +
+  geom_errorbar(data = median_metric,
+                aes(x = evidence,
                     ymin = CI_5,
-                    ymax = CI_95,
-                    color = evidence),
-                width = 0.1,
-                linewidth = 0.7) +
-  theme_light()
+                    ymax = CI_95),
+                alpha = 1,
+                width = 0.43,
+                linewidth = 1,
+                color = "grey50") +
+  geom_label(data = median_metric,
+          aes(x = evidence,
+              y = max_metric_result + 0.1,
+              label = paste("Median: ", round(median_warming_val, 2), "\n[", round(CI_5, 2), ", ", round(CI_95, 2), "]")),
+          size = 5) +
+  labs(x = NULL, 
+       y = expression(paste("Temperature Anomaly (", degree, "C)")),
+       title = "B)") +
+  ylim(0, 8) +
+  scale_color_manual(values = c("#003466", "#F21A00", "#550307", "#EBCC2A","#00a9cf"),
+                     guide = "none") +
+  scale_fill_manual(values = c("#003466", "#F21A00", "#550307", "#EBCC2A","#00a9cf"),
+                    guide = "none") +
+  scale_x_discrete(limit = rev(evidence_order)) +
+  theme_light(base_size = 24) +
+  theme(axis.text.y = element_blank()) +
+  coord_flip()
 point_plot
+
+ggsave("figures/temp_distributions.png",
+       device = "png",
+       width = 10.48,
+       height = 11.47, 
+       units = "in",
+       dpi = "print")
+
 ```
+____
+```{r}
+SSP_COLORS <- c("ssp119" = "#00a9cf", "ssp126" = "#003466", "ssp245" = "#f69320",
+                "ssp370" = "#df0000", "ssp434" = "#2274ae","ssp460" = "#b0724e",
+                "ssp585"= "#980002", "historical" = "#000000", "historical"="#92397a")
+```
+
+```{r}
+ridge_plot <- 
+  ggplot() +
+  ggridges::geom_density_ridges(data = sample_metric,
+         aes(x = metric_result,
+             y = evidence,
+             fill = evidence),
+         rel_min_height = 0.01,
+         stat = "binline",
+         bins = 40, 
+         scale = 0.95,
+         draw_baseline = T) +
+  geom_point(data = median_metric,
+             aes(x = median_warming_val,
+                 y = evidence),
+             size = 3,
+             color = "black",
+             alpha = 0.7,
+             shape = 1) +
+  
+ridge_plot
+```
+
+```{r}
+ridge_plot <- 
+  ggplot() +
+  ggridges::geom_density_ridges(data = sample_metric,
+         aes(x = metric_result,
+             y = evidence,
+             fill = evidence,
+             point_fill = evidence),
+         draw_baseline = T,
+         jittered_points = T,
+         point_size = 1, 
+         point_alpha = 0.05,
+         alpha = 0.7,
+         stat = "binline",
+         bins = 40, 
+         scale = 0.95,
+         draw_baseline = T) +
+  scale_color_manual(values = c("#003466", "#00a9cf", "#550307", "#EBCC2A", "#F21A00"),
+                     guide = "none") +
+  scale_fill_manual(values = c("#003466", "#00a9cf", "#550307", "#EBCC2A", "#F21A00"),
+                    name = "Evidence Line",
+                    labels = c("Baseline + Emergent Constraints",
+                                 "No Historical",
+                                 "No Paleoclimate",
+                                 "No Process",
+                                 "Baseline"))
+ridge_plot
+```
+
 
 
 # Other notes etc.
+
+Visualization 
 
 #### *This has already been run - do not run again unless you need to save a new file.* 
 Bind the rows of the dfs together to make a final large df with all results and save.
