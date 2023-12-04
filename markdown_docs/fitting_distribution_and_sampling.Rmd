@@ -172,12 +172,15 @@ set.seed(2)
 # set n value - how many ECS samples produced for each evidence configuration
 n = 10000
 
-# Produce list of data frames containing ECS samples
-# for each evidence configuration using gamma parameters
-# stored in hyper_param_list.
-# lapply will run a function that constructs a data frame of 
-# ECS samples with rgamma using the shape and rate parameters
-# stored in each element of hyper_param_list (here called 'evidence')
+# Generate a list of data frames containing ECS samples.
+# For each evidence configuration using gamma parameters stored in 
+# 'hyper_param_list'.
+# 
+# The 'lapply' function applies a function to each element in 'hyper_param_list'
+# to construct a data frame of ECS samples using 'rgamma'.
+# 
+# The shape and rate parameters are retrieved from each element 
+# (referred to as 'evidence').
 sample_list <- lapply(hyper_param_list, 
                       function(evidence) {
                         
@@ -190,17 +193,33 @@ sample_list <- lapply(hyper_param_list,
 
 # Visualize Simulated Samples
 
-Use ggplot2 to visualize samples simulated from the gamma distribution for each line of evidence.
+Once the ECS samples are produced and stored in a list of data frames (`sample_list`), the sample distribution can be visualized with `ggplot2`.
+
+Before working in `ggplot2`, I build a `sample_list` to a single data frame because it is easier to plot. 
 
 ```{r, results='hide'}
-# create dataframe
+# Create a new data frame 'ecs_samples_df' from elements in 'sample_list'.
+# 
+#   'value': Unlist ECS samples from 'sample_list'.
+#            This operation combines the vectors of each 
+#            element in 'sample_list' into a single vector under 
+#            the 'value' column.
+#            
+#  'evidence': Repeat names of each element in 'sample_list' 'n' times.
+#     Note: 'n' is set to 10,000 for each evidence combination.
+#   
+# Last, Remove row names to ensure a clean result.
+
 ecs_samples_df <- data.frame(
+  
   value = unlist(sample_list),
   evidence = rep(names(sample_list), each = n),
   row.names = NULL
+  
 )
-
 ```
+
+I will plot...
 
 ```{r}
 # plot
