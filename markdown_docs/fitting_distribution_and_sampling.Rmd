@@ -193,6 +193,8 @@ sample_list <- lapply(hyper_param_list,
                         })
 ```
 
+The result is a new list (`sample_list`) of data frames, one for each evidence scenario, that contains a vector of ECS values sampled from respective gamma distributions. 
+
 # Visualize Simulated Samples
 
 Once the ECS samples are produced and stored in a list of data frames (`sample_list`), the sample distribution can be visualized with `ggplot2`.
@@ -211,7 +213,6 @@ Before working in `ggplot2`, I build a `sample_list` to a single data frame beca
 #     Note: 'n' is set to 10,000 for each evidence combination.
 #   
 # Last, Remove row names to ensure a clean result.
-
 ecs_samples_df <- data.frame(
   
   value = unlist(sample_list),
@@ -221,24 +222,26 @@ ecs_samples_df <- data.frame(
 )
 ```
 
+The result is a data frame that combines ECS values sampled from gamma distributions for each evidence configuration (10,000 samples x 5 evidence scenarios = 50,000 rows). Each row is labeled with the name of the evidence configuration the value belongs to.   
+
 Plot ECS samples as a`geom_density` with faceted by 'evidence':
 
 ```{r}
 # Plot sample distributions of ECS for each evidence configuration.
 # 
-#   Use `geom_density()` plot with desired scale (`scale_x_continuous`)
-#   Facet figure by `evidence` (evidence configuration name) 
-
+# Use `geom_density()` plot with desired scale (`scale_x_continuous`).
+# Facet figure by `evidence` (evidence configuration name). 
 ggplot() +
   geom_density(data = ecs_samples_df,
                aes(x = value, 
                    color = evidence)) +
   theme_light() +
-  scale_x_continuous(breaks = seq(from = 0, to = 10, by = 1)) +
-  facet_wrap(~evidence)
+  scale_x_continuous(breaks = seq(from = 0, to = 10, 
+                                  by = 1)) +
+  facet_wrap(~ evidence)
   
 # Save the figure!
-ggsave("figures/ECS_dist.png",
+ggsave("figures/ECS_distributions.png",
        device = "png",
        width = 10,
        height = 8,
@@ -248,10 +251,14 @@ ggsave("figures/ECS_dist.png",
 
 # Using ECS samples to run Matilda
 
-Samples from the distributions above can be used as the ECS inputs for Hector/Matilda.
+Samples from the distributions above can be used as the ECS inputs for Hector/Matilda. This will propagate uncertainty of ECS, estimated using the gamma distribution samples, for each of the evidence configurations.
 
-Read in scenario inputs:
-```{r}
+Hector/Matilda need an emissions scenario to run. Loading these scenarios into R from ini files is explained in detail in the Hector beginner tutorial.
+
+For this analysis I use the SSP 2-4.5 scenario. This analysis can be completed across a number of different SSP scenarios that are stored in the Hector package. I create a list of commonly used scenarios (`ini_list`), but only use one scenario (SSP2-4.5) for the rest of the analysis. This is not necessarily efficient here, but if I want to run the analysis on a new scenario I want it to be loaded and stored in the list. This makes re-running the analysis with a new scenario easier.
+
+```{r, results='hide'}
+# Read in scenario ini files and store them in a list
 ini_list <- list(
 ssp126 = system.file("input/hector_ssp126.ini", package = "hector"), 
 ssp245 = system.file("input/hector_ssp245.ini", package = "hector"), 
@@ -260,18 +267,38 @@ ssp585 = system.file("input/hector_ssp585.ini", package = "hector")
 )
 ```
 
-Initiate cores:
-```{r}
+The ini files are used to initiate `core` environments in Hector (more details in Hector beginnger tutorial). 
+
+Here, I use `lapply()` to initiate `cores` (using `newcore()`) for all the scenarios loaded above and store in a core_list. Again this is not very efficient since I am only using one scenario for the current analysis. But makes re-running with a new scenario easier.
+
+```{r, results='hide'}
+# Initiate model core for each element of in ini_list
+# 
+# `lapply()` will run `newcore` for each element in `ini_list` 
 core_list <- lapply(ini_list, newcore)
 ```
 
-Generate parameter values using Matilda's priors. 
+The result of will be a new list (`core_list`) where each element in the list is a `core` that can be used to run a Hector.
 
-To isolate the effect of ECS values - use one core to produce all parameter values:
-```{r}
+# Generate parameter values using Matilda's priors 
+
+Matilda runs under the assumption that multiple perturbed parameter sets are being used to run Hector over multiple iterations to produce an ensemble of model outputs. Parameter sets are produced in Matilda using `generate_params()`.
+
+In this analysis I use `generate_params` to produce and initial parameter set (`init_params`). This will produce `n` sets of parameters that will run apply parameter uncertainty to Hector runs. There is and ECS (`ECS`) parameter column produced from this step. However, these ECS values are produced from the priors programmed into Matilda's parameter sampling procedure, not from the evidence configuration gamma distributions this code is analyzing. Therefore, this column will need to be replaced in a separate step. 
+
+I generate a `n` sets of model parameters using the one `core` (the first element in `core_list`):
+```{r, results='hide'}
+# Set seed for reproducible result
 set.seed(123)
+
+# Use first element in core_list to generate n number of draws for each 
+# parameter. Store in a new object.
 init_params <- generate_params(core = core_list[[1]], draws = n)
 ```
+
+The result will be a new data frame object (`init_params`) with 10,000 samples for 6 columns labeled for the variables they represent. 
+
+*Note:* **Again** it is important to note that this data frame has a column for `ECS` - but that these values are sample from a prior distribution...not the distributions chosen for the analysis at hand.
 
 For each parameter set in the list, remove the ECS column and add parameters to ECS samples from gamma sampling effort:
 ```{r}
@@ -288,6 +315,8 @@ params_list <- lapply(sample_list, function(data){
 # just one evidence scenario
 test_one_param_df <- list(params_list$UL)
 ```
+
+# Run Hector with Matilda
 
 Use parallel computing to run Hector for each of the parameter set in `params_list` over :
 
