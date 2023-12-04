@@ -147,10 +147,12 @@ This method reproduces the likelihood distribution that has similar peak and spr
 Brief notes on `fitdistr()`: This function fits a maximum likelihood distribution to each element in the data list. It is possible to manipulate it in several ways, but I don't make any of these changes to minimize bias on the resulting distribution.
 
 ```{r, results='hide'}
-# produce the rate and shape parameters for 
-# the gamma distributions for each element in the data_list
-# lapply will run fitdistr with the gamma density function for 
-# each element in data_list
+# Produce the rate and shape parameters for the gamma distributions for each 
+# element in `data_list`.
+# 
+# `lapply()` will run `fitdistr()` with the gamma density function (`densfun`) 
+# for each element in `data_list`
+
 hyper_param_list <- lapply(data_list, 
                            fitdistr, 
                            densfun = "gamma")
@@ -219,10 +221,14 @@ ecs_samples_df <- data.frame(
 )
 ```
 
-I will plot...
+Plot ECS samples as a`geom_density` with faceted by 'evidence':
 
 ```{r}
-# plot
+# Plot sample distributions of ECS for each evidence configuration.
+# 
+#   Use `geom_density()` plot with desired scale (`scale_x_continuous`)
+#   Facet figure by `evidence` (evidence configuration name) 
+
 ggplot() +
   geom_density(data = ecs_samples_df,
                aes(x = value, 
@@ -230,7 +236,9 @@ ggplot() +
   theme_light() +
   scale_x_continuous(breaks = seq(from = 0, to = 10, by = 1)) +
   facet_wrap(~evidence)
-  ggsave("figures/ECS_dist.png",
+  
+# Save the figure!
+ggsave("figures/ECS_dist.png",
        device = "png",
        width = 10,
        height = 8,
