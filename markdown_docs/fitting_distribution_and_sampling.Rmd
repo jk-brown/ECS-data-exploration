@@ -54,9 +54,9 @@ library(parallel)
 
 # Data
 
-Here ECS data sets are built for each evidence configuration using ECS values from S20. This data was harvested from supplemental information in S20 and represents ECS percentile estimates from likelihood distributions quantified in S20 for each of the five evidence configurations I am using in this analysis. The percentile estimates reported in this data represent the 5th, 10th, 17th, 20th, 25th, 50th, 75th, 80th, 83rd, 90th, and 95th percentiles as well as the mode and mean.
+Here ECS data sets are built for each evidence configuration using ECS values from S20. This data was harvested from supplemental information in S20 and represents ECS percentile estimates from likelihood distributions quantified in S20 for each of the five evidence configurations (other configurations are available in S20 beyond these five). The percentile estimates reported in this data represent the 5th, 10th, 17th, 20th, 25th, 50th, 75th, 80th, 83rd, 90th, and 95th percentiles as well as the mode and mean.
 
-Store data as a list of vectors, this makes programming the rest of the analysis easier. Names of each list are coded to represent the evidence configuration the data is associated with.
+Store data as a list of vectors, this makes programming the rest of the analysis easier. Names of each list are coded to represent the evidence configuration each data set in the data list is associated with.
 
 ```{r}
 data_list <- list(
@@ -140,37 +140,52 @@ data_list <- list(
 
 # Fit Distirbution to the data 
 
-Use `fitdistr()` to maximize the likelihood of distribution parameters to fit a provided set of data. I am using this as a quick and easy way to propose distributions for Sherwood et al. 2020 lines of evidence for ECS assuming that ECS follows a `gamma` distribution. 
+Here I am using `fitdistr()` (function in the `MASS` package) to maximize the likelihood of distribution parameters to fit a provided set of data. I am using this as a quick and easy way to propose/reproduce distributions for S20 evidence configurations, assuming that ECS follows a gamma distribution. 
 
-This method will reproduce likely distribution following a gamma distbution that will have a similar peak and spread as the distributions presented in Sherwood et al. 2020. 
+This method reproduces the likelihood distribution that has similar peak and spread as the distributions presented in S20 and is easily sampled. The result of `fitdistr()` is the optimal `shape` and `rate` parameters of the gamma distributions for each evidence configuration. These distribution parameters will be used in `rlgamma()` to produce samples that characterize the uncertainty of ECS from different evidence configurations. This error can be propagated through Hector/Matilda. 
 
-The optimal `shape` and `rate` parameters for each `gamma` distribution of ECS for different lines of evidence will be used in `rlgamma()` to produce samples that can be propagated through Matilda/Hector. 
-
-`fitdistr()` function in the `MASS` package to fit a maximum likelihood `gamma` distribution to each element in the data list. It is possible to manipulated in several ways. I will avoid that for now to minimize bias.
+Brief notes on `fitdistr()`: This function fits a maximum likelihood distribution to each element in the data list. It is possible to manipulate it in several ways, but I don't make any of these changes to minimize bias on the resulting distribution.
 
 ```{r, results='hide'}
-
-hyper_param_list <- lapply(data_list, fitdistr, densfun = "gamma")
+# produce the rate and shape parameters for 
+# the gamma distributions for each element in the data_list
+# lapply will run fitdistr with the gamma density function for 
+# each element in data_list
+hyper_param_list <- lapply(data_list, 
+                           fitdistr, 
+                           densfun = "gamma")
 
 ```
 
-The parameter list includes estimated `shape` and `rate` parameters for each evidence PDF. Each element of the list also produces a log-likelihood value.
+The result is a new list (`hyper_param_list`) of estimated `rate` and `shape` parameters of a gamma distribution for each evidence configuration.
 
 # Sample Distributions
 
-Use the parameters for each line of evidence to simulate n samples from a gamma distribution.
+Using the gamma distribution parameters produced in the previous code chunk, I want to obtain a sample of ECS values for each evidence configuration. 
+
+Here I produce n samples for each of the evidence configurations using `rgamma` with the `shape` and `rate` parameters stored in `hyper_param_list`:
 
 ```{r, results='hide'}
+# set seed for reproducible results
 set.seed(2)
 
+# set n value - how many ECS samples produced for each evidence configuration
 n = 10000
 
-sample_list <- lapply(hyper_param_list, function(evidence) {
-  data.frame(ECS = rgamma(n,
-                          shape = evidence$estimate["shape"],
-                          rate = evidence$estimate["rate"]))
-})
-  
+# Produce list of data frames containing ECS samples
+# for each evidence configuration using gamma parameters
+# stored in hyper_param_list.
+# lapply will run a function that constructs a data frame of 
+# ECS samples with rgamma using the shape and rate parameters
+# stored in each element of hyper_param_list (here called 'evidence')
+sample_list <- lapply(hyper_param_list, 
+                      function(evidence) {
+                        
+                        data.frame(ECS = rgamma(n,
+                                                shape = evidence$estimate["shape"],
+                                                rate = evidence$estimate["rate"]))
+                        
+                        })
 ```
 
 # Visualize Simulated Samples
