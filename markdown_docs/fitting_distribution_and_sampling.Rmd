@@ -330,7 +330,6 @@ With the full list of parameter data frames now in `params_list` for each of the
 To make this process more efficient, I use parallel computing to spread the job over several threads on my local CPU.
 
 Use parallel computing to run Hector/Matilda for each of the parameter set in `params_list` using the SSP2-4.5 scenario:
-
 ```{r}
 # Create a "cluster" of parallel workers, each corresponding to a CPU core.
 # Here I use all cores except for one.
@@ -398,46 +397,77 @@ for(name in names(result)) {
 }
 ```
 
+The result of this section of code is a list of results for each evidence configuration (`result`). In the `result` object, each element is a Matilda result, one for each of the evidence configurations being considered here. 
+
+With these results, I can determine how well individual ensemble members (for each evidence configuration) represents observed historical data. This is done in the "scoring" or "weighting" step and will down weight ensemble members that don't accurately represent observed values, under the assumption that ensembles that are skilled at representing historical data are also skilled at projecting futures.
+
 # Weighting ensemble members against observed data
 
-## ensembles weighted with temperature and co2 data
+In this analysis I weight ensemble members using two methods:
 
-### ensembles weighted with temperature data
+1) Historical temperature
 
-Weight models based on observed temperature using score_ramp (w1 = 0.0, w2 = sd(observed gmst))
+2) Historical atmospheric CO2 concentrations 
 
+Details for each of these weighting criteria can be found in the Matilda vignette and/or in the Matilda v1.0 software description pre-print.
+
+There are two basic methods available for weighting in Matilda. Here, I use the `score_ramp` method. In this method I identify lower and upper bounds. As average ensemble difference diverges, weights degrade until surpassing an upper divergence limit (standard deviation of the observed data), at which point ensemble members are culled. 
+
+Complete both individual scoring methods (temperature and CO2) then combine them to produce a multi-criteria weight. This is completed for each element of the `result` list: 
 ```{r}
+# For each element (df) in `result`:
+# 
+#   - score using observed temperature (GMST)
+#   
+#   - score using observed CO2
+#   
+#   - omit NAs in both cases
+#   
+#   - combine scores with `multi_criteria_weighting`
 scored_result <- lapply(result, function(df) {
   
+  # Score ensemble members based on temperature (GMST)
   scores_gmst = score_runs(df,
                            criterion = criterion_gmst_obs(),
                            score_function = score_ramp, # can change scoring function here
                            w1 = 0.0, # adjust lower divergence bound
-                           w2 = sd(matilda:::adjusted_gmst_data$anomaly_C)
-                           ) # adjust upper divergence bound
+                           w2 = sd(matilda:::adjusted_gmst_data$anomaly_C)) # adjust upper divergence bound
+  
+  # Omit NAs from temperature scored result -- IMPORTANT
   scores_gmst <- na.omit(scores_gmst)
   
+  # Score ensemble members based on CO2 concentration 
   scores_co2 = score_runs(df,
                           criterion = criterion_co2_obs(),
                           score_function = score_ramp, # can change scoring function here
                           w1 = 0.0, # adjust lower divergence bound
-                          w2 = sd(matilda:::observed_data_co2$co2_ppm)
-                          ) # adjust upper divergence bound
+                          w2 = sd(matilda:::observed_data_co2$co2_ppm)) # adjust upper divergence bound
+  
+  # Omit NAs from CO2 scored result -- IMPORTANT 
   scores_co2 <- na.omit(scores_co2)
   
+  # Combine individual scores into a list
   score_list = list(scores_co2, scores_gmst)
   
+  # Calculate multi-criteria weighting with `score_list`
   scores_mc = multi_criteria_weighting(score_list)
   
+  # Merge scores with the original data frame based on run_number
+  # This will add rows for each scoring method
   scored_result = merge(df, scores_gmst, by = "run_number")
   scored_result = merge(scored_result, scores_co2, by = "run_number")
   scored_result = merge(scored_result, scores_mc, by = "run_number")
     
 })
 
+# Combine the scored results into a data frame
 result_scored <- do.call(rbind, scored_result)
+
+# Reset row names to avoid potential issues
 row.names(result_scored) <- NULL
 ```
+
+The result of this code will be a large data frame object that contains Matilda results for each evidence configuration with 3 new columns, one for each scoring method. There should no longer be NAs in the data frame. Any NAs that existed after producing list of Matilda `result` data frames for each evidence configuration should have been omitted in this code chunk. As a fail safe or checking step, run `anyNA()` on the `result_scored` data frame.
 
 normalizing function:
 
