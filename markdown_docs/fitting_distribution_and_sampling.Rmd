@@ -28,7 +28,7 @@ Here the goal was to take advantage of these ECS likelihood distributions, which
 
 A parametric likelihood distribution was produced by optimizing the shape and rate parameters of a gamma distribution using the S20 data for each of the evidence configurations. The purpose of this method was to reproduce distributions with similar peak and spread as the official likelihood distributions quantified in S20, that can also be sampled with little effort. Using this method, ECS values can be sampled n times (while taking into account estimated uncertainty) from distributions that mimic those developed in S20. This was completed for each evidence configuration.
 
-Sampled ECS values for each evidence configuration was used to establish a parameter set that was used to complete a single run of the Hector simple climate model. Using the Matilda probabilistic framework this process is iterated over several parameter sets, each with a slightly different ECS value to produce a perturbed parameter ensemble (PPE) result. As a result, the uncertainty associated with ECS from different evidence combinations is propagated through to an ensemble of modeled climate projections. 
+Sampled ECS values for each evidence configuration was used to establish a parameter set that was used to complete a single run of the Hector simple climate model. Using the Matilda probabilistic framework this process is iterated over several parameter sets, each with a slightly different ECS value to produce a perturbed parameter ensemble (PPE) result. As a result, the uncertainty associated with ECS from different evidence combinations is propagated through an ensemble of modeled climate projections. 
 
 PPEs are weighted against historical data (specifically historical temperature and CO2 concentrations). This process down weights ensemble members that significantly diverge from observed values while assigning higher weights to ensemble members that perform well during the historical period. This step is performed under the assumption that ensembles members that perform well in the historical period have a higher potential to more accurately projected future climate variables.
 
@@ -300,55 +300,100 @@ The result will be a new data frame object (`init_params`) with 10,000 samples f
 
 *Note:* **Again** it is important to note that this data frame has a column for `ECS` - but that these values are sample from a prior distribution...not the distributions chosen for the analysis at hand.
 
-For each parameter set in the list, remove the ECS column and add parameters to ECS samples from gamma sampling effort:
+For each parameter set in the list, remove current ECS column and replace with ECS samples from gamma sampling effort:
 ```{r}
+# Creating a list of modified data frames based on ECS values in `sample_list`
 params_list <- lapply(sample_list, function(data){
   
+  # copying the initial parameter values to a new object
   params_no_ecs <- init_params
   
+  # Removing the 'ECS' column from the copied parameter data frame
   params_no_ecs$ECS <- NULL
   
+  # Combing the current data frame (from sample_list) with the modified 
+  # parameter data frame (param_no_ecs)
   cbind(data, params_no_ecs)
   
 })
 
-# just one evidence scenario
-test_one_param_df <- list(params_list$UL)
+# Extracting a specific data frame from `params_list` as a check
+# Here, extracting the 'Baseline' data frame to assess if ECS column was 
+# replaced correctly
+test_one_param_df <- list(params_list$Baseline)
 ```
 
 # Run Hector with Matilda
 
-Use parallel computing to run Hector for each of the parameter set in `params_list` over :
+With the full list of parameter data frames now in `params_list` for each of the evidence configurations, I use them to run Hector with Matilda to conduct a single Hector run for each of the 10,000 parameter sets (per each evidence configuration = 50,000 total runs). 
+
+To make this process more efficient, I use parallel computing to spread the job over several threads on my local CPU.
+
+Use parallel computing to run Hector/Matilda for each of the parameter set in `params_list` using the SSP2-4.5 scenario:
 
 ```{r}
+# Create a "cluster" of parallel workers, each corresponding to a CPU core.
+# Here I use all cores except for one.
 cl <- makeCluster(detectCores() - 1)
 
+# Export the necessary functions and data to the parallel cluster.
+# This should include any functions or data that are referenced when running 
+# the paralleled loop.
 clusterExport(cl, c("iterate_model", "params_list", "ini_list", "newcore"))
 
+# Record the start time as a performance measurement
 start <- proc.time()
+
+# Use simple parallel computing to: 
+# 
+#   1) Initialize a core using the ini file for SSP2-4.5 -- a new core will be
+#      initialized for each element of `params_list`
+#   
+#   2) Apply `iterate_model` to each element of 
+#      `params_list`
+#      
 result <- parLapply(cl, params_list, function(params) {
+  
+  # 1) Initialize SSP2-4.5 scenario core
   core = newcore(ini_list$ssp245)
   
+  # 2) Call iterate_model for current element in `params_list`
   iterate_model(
     core = core,
     params = params,
-    save_years = 1800:2100,
-    save_vars = c("CO2_concentration", "gmst")
+    save_years = 1800:2100, # identifies years to save
+    save_vars = c("CO2_concentration", "gmst") # identifies output variables to save
   )
 })
 
+# Stop the parallel "cluster" after computation is complete
 stopCluster(cl)
+
+# Calculate and print the elapsed time for performance analysis
 proc.time() - start
 ```
 
-Running the above code chunk on 8 core cluster applies 10,000 parameter sets for each line of evidence in params_list across the SSP2-4.5 emissions scenario. The code results in a list of result dfs, one for each line of evidence. Each df will have a total of 6,020,000 rows (1 scenario x 2 variables x 301 years x 10000 runs).
+This code results in a list of Matilda result data frames, one for each evidence configuration. Each data frame will have a total of 6,020,000 rows (1 scenario x 2 variables x 301 years x 10000 runs).
 
-Loop through the list of result dfs and add a column identifying its line of evidence. Do this by creating a new df based on the name of the df in the result_na_rm list, then add an evidence column to each new df that is the name of the df in result_na_rm, and last replace the old df with the new one in the result_na_rm list
+Running this number of iterations may have resulted in some failed runs. The failed runs are identified by NAs in the result data frame for each evidence configuration in `result`. It is crucial to note that before NAs are removed, model ensemble members should be weighted. It's important to weight ensemble members BEFORE removing NAs in the result data frames. This is a programming detail that we are currently working to improve.
+
+Before weighting the ensemble members in the data frames, I complete some post-processing. I loop through the list of result data frames (for each evidence configuration) and add a column identifying its evidence configuration. This additional step modifies each data frame element in `result` that will make future steps easier to complete and interpret.
 
 ```{r}
+# Post-processing step before weighting ensemble members.
+
+# Loop through elements in the list of `result` data frames (evidence configurations).
 for(name in names(result)) {
+  
+  # Retrieve the current data frame associated with the evidence configuration. 
   df <- result[[name]]
+  
+  # Add a new column named "evidence" to the data frame and populate it with
+  # the name of the current element (evidence configuration)
   df$evidence <- name
+  
+  # Update the original data frame in `result` list with the modified data frame 
+  # that includes the "evidence column. 
   result[[name]] <- df
 }
 ```
