@@ -317,7 +317,7 @@ params_list <- lapply(sample_list, function(data){
   
 })
 
-# Extracting a specific data frame from `params_list` as a check
+# Extracting a specific data frame from `params_list` as a check.
 # Here, extracting the 'Baseline' data frame to assess if ECS column was 
 # replaced correctly
 test_one_param_df <- list(params_list$Baseline)
